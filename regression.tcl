@@ -21,10 +21,10 @@
 
 namespace eval ::poc {
 	variable myConfigFile  "../tb/common/my_config_GENERIC.vhdl"
-	variable myProjectFile "../tb/common/my_project.vhdl"
+	variable myProjectFile "../temp/my_project.vhdl"
 	variable vendor "GENERIC"; # GENERIC for vendor-less build; Xilinx, Altera,... for vendor specific build
 }
-
+# trigger test
 source ../lib/OSVVM-Scripts/StartUp.tcl
 # source ../lib/OSVVM-Scripts/StartNVC.tcl
 
