@@ -1,6 +1,7 @@
 name: Analyze and simulate PoC using OSVVM
-
 on:
+  push:
+  pull_request:
   workflow_call:
     inputs:
       ubuntu-version:
