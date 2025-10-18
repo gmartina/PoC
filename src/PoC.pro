@@ -31,7 +31,7 @@ analyze ./bus/axi4/AXI4_Common.pkg.vhdl
 analyze ./bus/axi4/AXI4_Full.pkg.vhdl
 analyze ./bus/axi4/AXI4Stream/AXI4Stream.pkg.vhdl
 analyze ./bus/axi4/AXI4Lite/AXI4Lite.pkg.vhdl
-analyze ./bus/axi4/AXI4Lite/AXI4Lite_Register.vhdl
+#analyze ./bus/axi4/AXI4Lite/AXI4Lite_Register.vhdl
 analyze ./bus/axi4/axi4.pkg.vhdl
 
 include ./arith/arith.pro
