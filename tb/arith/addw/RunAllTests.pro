@@ -1,5 +1,5 @@
 # =============================================================================
-# Authors: Jonas Schreiner
+# Authors: 
 #
 # License:
 # =============================================================================
@@ -18,12 +18,8 @@
 # limitations under the License.
 # =============================================================================
 
-TestSuite PoC.arith
+analyze arith_addw_TestController_pkg.vhdl
+analyze arith_addw_TestController.vhdl
+analyze arith_addw_TestHarness.vhdl
 
-library tb_arith
-
-include ./prng/RunAllTests.pro
-include ./prefix_and/RunAllTests.pro
-include ./prefix_or/RunAllTests.pro
-include ./addw/RunAllTests.pro
-include ./counter_bcd/RunAllTests.pro
+RunTest arith_addw_Simple.vhdl
