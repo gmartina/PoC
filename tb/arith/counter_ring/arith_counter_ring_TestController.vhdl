@@ -2,14 +2,13 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:					Gustavo Martin
 --
--- Entity:					arith_addw_TestController_pkg
+-- Entity:					arith_counter_ring_TestController
 --
 -- Description:
 -- -------------------------------------
--- Test controller package for arith_addw
+-- Test controller for arith_counter_ring component
 --
 -- License:
 -- =============================================================================
@@ -34,19 +33,13 @@ use     IEEE.std_logic_1164.all;
 library osvvm;
 context osvvm.OsvvmContext;
 
-library PoC;
-use     PoC.arith.all;
 
-package arith_addw_TestController_pkg is
-
-  constant N : positive := 9;
-  constant K : positive := 2;
-
-  subtype tArch_test is tArch;
-  subtype tSkip_test is tSkipping;
-
-  subtype word is std_logic_vector(N-1 downto 0);
-  type word_vector is array(tArch_test, tSkip_test, boolean) of word;
-  type carry_vector is array(tArch_test, tSkip_test, boolean) of std_logic;
-
-end package;
+entity arith_counter_ring_TestController is
+	port (
+		Clock : in  std_logic;
+		Reset : in  std_logic;
+		inc   : out std_logic := '0';
+		dec   : out std_logic := '0';
+		value : in  std_logic_vector
+	);
+end entity;

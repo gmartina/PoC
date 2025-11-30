@@ -2,18 +2,20 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:          Patrick Lehmann
+--                   Gustavo Martin
 --
--- Entity:					arith_addw_TestController_pkg
+-- Entity:           sync_Reset_TestController
 --
 -- Description:
 -- -------------------------------------
--- Test controller package for arith_addw
+-- OSVVM test controller entity for reset signal synchronizer
 --
 -- License:
 -- =============================================================================
 -- Copyright 2025-2025 The PoC-Library Authors
+-- Copyright 2007-2016 Technische Universitaet Dresden - Germany
+--                     Chair of VLSI-Design, Diagnostics and Architecture
 --
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
@@ -34,19 +36,12 @@ use     IEEE.std_logic_1164.all;
 library osvvm;
 context osvvm.OsvvmContext;
 
-library PoC;
-use     PoC.arith.all;
 
-package arith_addw_TestController_pkg is
-
-  constant N : positive := 9;
-  constant K : positive := 2;
-
-  subtype tArch_test is tArch;
-  subtype tSkip_test is tSkipping;
-
-  subtype word is std_logic_vector(N-1 downto 0);
-  type word_vector is array(tArch_test, tSkip_test, boolean) of word;
-  type carry_vector is array(tArch_test, tSkip_test, boolean) of std_logic;
-
-end package;
+entity sync_Reset_TestController is
+	port (
+		Clock1 : in  std_logic;
+		Clock2 : in  std_logic;
+		Input  : out std_logic;
+		Output : in  std_logic
+	);
+end entity;

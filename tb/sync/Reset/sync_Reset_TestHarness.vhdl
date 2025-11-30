@@ -2,14 +2,13 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:          Gustavo Martin
 --
--- Entity:					arith_addw_TestController_pkg
+-- Entity:           sync_Reset_TestHarness
 --
 -- Description:
 -- -------------------------------------
--- Test controller package for arith_addw
+-- OSVVM testbench harness for reset signal synchronizer
 --
 -- License:
 -- =============================================================================
@@ -30,23 +29,63 @@
 
 library IEEE;
 use     IEEE.std_logic_1164.all;
+use     IEEE.numeric_std.all;
 
 library osvvm;
 context osvvm.OsvvmContext;
 
 library PoC;
-use     PoC.arith.all;
 
-package arith_addw_TestController_pkg is
 
-  constant N : positive := 9;
-  constant K : positive := 2;
+entity sync_Reset_TestHarness is
+end entity;
 
-  subtype tArch_test is tArch;
-  subtype tSkip_test is tSkipping;
 
-  subtype word is std_logic_vector(N-1 downto 0);
-  type word_vector is array(tArch_test, tSkip_test, boolean) of word;
-  type carry_vector is array(tArch_test, tSkip_test, boolean) of std_logic;
+architecture TestHarness of sync_Reset_TestHarness is
+	-- Clock periods (100 MHz and 60 MHz)
+	constant TPERIOD_CLOCK_1 : time := 10 ns;
+	constant TPERIOD_CLOCK_2 : time := 16.667 ns;
 
-end package;
+	signal Clock1 : std_logic := '1';
+	signal Clock2 : std_logic := '1';
+
+	signal Input  : std_logic;
+	signal Output : std_logic;
+
+
+	component sync_Reset_TestController is
+		port (
+			Clock1 : in  std_logic;
+			Clock2 : in  std_logic;
+			Input  : out std_logic;
+			Output : in  std_logic
+		);
+	end component;
+
+begin
+	Osvvm.ClockResetPkg.CreateClock(
+		Clk    => Clock1,
+		Period => TPERIOD_CLOCK_1
+	);
+
+	Osvvm.ClockResetPkg.CreateClock(
+		Clk    => Clock2,
+		Period => TPERIOD_CLOCK_2
+	);
+
+	DUT : entity PoC.sync_Reset
+		port map (
+			Clock  => Clock2,
+			Input  => Input,
+			Output => Output
+		);
+
+	TestCtrl : component sync_Reset_TestController
+		port map (
+			Clock1 => Clock1,
+			Clock2 => Clock2,
+			Input  => Input,
+			Output => Output
+		);
+
+end architecture;

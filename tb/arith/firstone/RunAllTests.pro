@@ -1,7 +1,6 @@
 # =============================================================================
-# Authors:
-#	Adrian Weiland, Jonas Schreiner
-#
+# Authors: 
+#   Gustavo Martin
 # License:
 # =============================================================================
 # Copyright 2025-2025 The PoC-Library Authors
@@ -10,7 +9,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#		http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,15 +18,7 @@
 # limitations under the License.
 # =============================================================================
 
-include ./arith/RunAllTests.pro
-include ./bus/RunAllTests.pro
-include ./sync/RunAllTests.pro
-#include ./cache/RunAllTests.pro
-#include ./common/RunAllTests.pro
-#include ./dstruct/RunAllTests.pro
-#include ./fifo/RunAllTests.pro
-include ./io/RunAllTests.pro
-#include ./mem/RunAllTests.pro
-#include ./misc/RunAllTests.pro
-#include ./sim/RunAllTests.pro
-#include ./sort/RunAllTests.pro
+analyze arith_firstone_TestController.vhdl
+analyze arith_firstone_TestHarness.vhdl
+
+RunTest arith_firstone_Simple.vhdl

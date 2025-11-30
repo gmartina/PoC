@@ -2,14 +2,13 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:       Gustavo Martin
 --
--- Entity:					arith_addw_TestController_pkg
+-- Entity:        arith_trng_TestHarness
 --
 -- Description:
 -- -------------------------------------
--- Test controller package for arith_addw
+-- Test harness for arith_trng component
 --
 -- License:
 -- =============================================================================
@@ -30,23 +29,65 @@
 
 library IEEE;
 use     IEEE.std_logic_1164.all;
+use     IEEE.numeric_std.all;
 
 library osvvm;
 context osvvm.OsvvmContext;
 
 library PoC;
-use     PoC.arith.all;
 
-package arith_addw_TestController_pkg is
 
-  constant N : positive := 9;
-  constant K : positive := 2;
+entity arith_trng_TestHarness is
+end entity;
 
-  subtype tArch_test is tArch;
-  subtype tSkip_test is tSkipping;
 
-  subtype word is std_logic_vector(N-1 downto 0);
-  type word_vector is array(tArch_test, tSkip_test, boolean) of word;
-  type carry_vector is array(tArch_test, tSkip_test, boolean) of std_logic;
+architecture TestHarness of arith_trng_TestHarness is
+	constant TPERIOD_CLOCK : time := 10 ns;
 
-end package;
+	constant BITS : positive := 8;
+
+	signal Clock : std_logic := '1';
+	signal Reset : std_logic := '1';
+
+	signal rnd : std_logic_vector(BITS - 1 downto 0);
+
+
+	component arith_trng_TestController is
+		port (
+			Clock : in  std_logic;
+			Reset : in  std_logic;
+			rnd   : in  std_logic_vector
+		);
+	end component;
+
+begin
+	Osvvm.ClockResetPkg.CreateClock(
+		Clk    => Clock,
+		Period => TPERIOD_CLOCK
+	);
+
+	Osvvm.ClockResetPkg.CreateReset(
+		Reset       => Reset,
+		ResetActive => '1',
+		Clk         => Clock,
+		Period      => 5 * TPERIOD_CLOCK,
+		tpd         => 0 ns
+	);
+
+	DUT : entity PoC.arith_trng
+		generic map (
+			BITS => BITS
+		)
+		port map (
+			clk => Clock,
+			rnd => rnd
+		);
+
+	TestCtrl: component arith_trng_TestController
+		port map (
+			Clock => Clock,
+			Reset => Reset,
+			rnd   => rnd
+		);
+
+end architecture;
