@@ -25,7 +25,7 @@ include ./bus/RunAllTests.pro
 #include ./common/RunAllTests.pro
 #include ./dstruct/RunAllTests.pro
 #include ./fifo/RunAllTests.pro
-#include ./io/RunAllTests.pro
+include ./io/RunAllTests.pro
 #include ./mem/RunAllTests.pro
 #include ./misc/RunAllTests.pro
 #include ./sim/RunAllTests.pro
