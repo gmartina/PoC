@@ -66,8 +66,11 @@ architecture TestHarness of io_ShiftRegister_SIPO_TestHarness is
 	signal Clock : std_logic := '1';
 	signal Reset : std_logic := '1';
 
-	-- Frequency selection (driven by test controller)
-	signal ShiftFreqSel : natural range 0 to 1 := 0;
+	-- DUT selection (driven by test controller):
+	--   0 = 5 MHz shift clock, ACTIVE_LOW_CLEAR=TRUE
+	--   1 = 30 MHz shift clock, ACTIVE_LOW_CLEAR=TRUE
+	--   2 = 5 MHz shift clock, ACTIVE_LOW_CLEAR=FALSE
+	signal ShiftFreqSel : natural range 0 to 2 := 0;
 
 	-- DUT interface signals
 	signal Start      : std_logic;
@@ -81,14 +84,18 @@ architecture TestHarness of io_ShiftRegister_SIPO_TestHarness is
 	signal LatchClock  : std_logic;
 	signal Clear_n     : std_logic;
 
-	-- Per-DUT signals (one set per frequency)
-	signal Start_Slow, Start_Fast           : std_logic;
-	signal Busy_Slow, Busy_Fast             : std_logic;
-	signal Done_Slow, Done_Fast             : std_logic;
-	signal SerialOut_Slow, SerialOut_Fast   : std_logic;
-	signal ShiftClock_Slow, ShiftClock_Fast : std_logic;
-	signal LatchClock_Slow, LatchClock_Fast : std_logic;
-	signal Clear_n_Slow, Clear_n_Fast       : std_logic;
+	-- Per-DUT signals (one set per configuration)
+	signal Start_Slow, Start_Fast, Start_ActiveHigh      : std_logic;
+	signal Busy_Slow, Busy_Fast, Busy_ActiveHigh         : std_logic;
+	signal Done_Slow, Done_Fast, Done_ActiveHigh         : std_logic;
+	signal SerialOut_Slow, SerialOut_Fast                : std_logic;
+	signal SerialOut_ActiveHigh                          : std_logic;
+	signal ShiftClock_Slow, ShiftClock_Fast              : std_logic;
+	signal ShiftClock_ActiveHigh                         : std_logic;
+	signal LatchClock_Slow, LatchClock_Fast              : std_logic;
+	signal LatchClock_ActiveHigh                         : std_logic;
+	signal Clear_n_Slow, Clear_n_Fast, Clear_n_ActiveHigh : std_logic;
+	signal Clear_n_Raw : std_logic;  -- Raw DUT output for test verification
 
 	-- Model output signals
 	signal ModelParallelOut : std_logic_vector(7 downto 0);
@@ -98,11 +105,12 @@ architecture TestHarness of io_ShiftRegister_SIPO_TestHarness is
 		port (
 			Clock            : in  std_logic;
 			Reset            : in  std_logic;
-			ShiftFreqSel     : out natural range 0 to 1;
+			ShiftFreqSel     : out natural range 0 to 2;
 			Start            : out std_logic;
 			Busy             : in  std_logic;
 			Done             : in  std_logic;
 			DataToSend       : out std_logic_vector(7 downto 0);
+			Clear_n          : in  std_logic;
 			ModelParallelOut : in  std_logic_vector(7 downto 0)
 		);
 	end component;
@@ -155,10 +163,10 @@ begin
 	);
 
 	-- =========================================================================
-	-- DUT instances with different shift frequencies
+	-- DUT instances with different configurations
 	-- =========================================================================
 
-	-- DUT 0: Slow (5 MHz) shift clock
+	-- DUT 0: Slow (5 MHz) shift clock, ACTIVE_LOW_CLEAR=TRUE
 	DUT_Slow : entity PoC.io_ShiftRegister_SIPO_Controller
 		generic map (
 			BITS                    => BITS,
@@ -183,7 +191,7 @@ begin
 			Clear_n     => Clear_n_Slow
 		);
 
-	-- DUT 1: Fast (30 MHz) shift clock
+	-- DUT 1: Fast (30 MHz) shift clock, ACTIVE_LOW_CLEAR=TRUE
 	DUT_Fast : entity PoC.io_ShiftRegister_SIPO_Controller
 		generic map (
 			BITS                    => BITS,
@@ -208,23 +216,67 @@ begin
 			Clear_n     => Clear_n_Fast
 		);
 
+	-- DUT 2: Slow (5 MHz) shift clock, ACTIVE_LOW_CLEAR=FALSE (active-high clear)
+	DUT_ActiveHigh : entity PoC.io_ShiftRegister_SIPO_Controller
+		generic map (
+			BITS                    => BITS,
+			ACTIVE_LOW_CLEAR        => FALSE,  -- Active-high clear signal
+			ACTIVE_LOW_SERIAL_OUT   => FALSE,
+			ACTIVE_LOW_LATCH        => FALSE,
+			ACTIVE_LOW_SHIFT_CLK    => FALSE,
+			CLOCK_FREQ              => CLOCK_FREQ,
+			SHIFT_FREQ              => SHIFT_FREQ_SLOW,
+			ADD_OUTPUT_REGISTERS    => FALSE
+		)
+		port map (
+			Clock       => Clock,
+			Reset       => Reset,
+			Start       => Start_ActiveHigh,
+			Busy        => Busy_ActiveHigh,
+			Done        => Done_ActiveHigh,
+			DataToSend  => DataToSend,
+			SerialOut   => SerialOut_ActiveHigh,
+			ShiftClock  => ShiftClock_ActiveHigh,
+			LatchClock  => LatchClock_ActiveHigh,
+			Clear_n     => Clear_n_ActiveHigh
+		);
+
 	-- =========================================================================
 	-- Multiplexers: Select active DUT based on ShiftFreqSel
 	-- =========================================================================
 
 	-- Route Start to selected DUT
-	Start_Slow <= Start when ShiftFreqSel = 0 else '0';
-	Start_Fast <= Start when ShiftFreqSel = 1 else '0';
+	Start_Slow       <= Start when ShiftFreqSel = 0 else '0';
+	Start_Fast       <= Start when ShiftFreqSel = 1 else '0';
+	Start_ActiveHigh <= Start when ShiftFreqSel = 2 else '0';
 
 	-- Mux outputs from selected DUT
-	Busy <= Busy_Slow when ShiftFreqSel = 0 else Busy_Fast;
-	Done <= Done_Slow when ShiftFreqSel = 0 else Done_Fast;
+	Busy <= Busy_Slow when ShiftFreqSel = 0 else
+	        Busy_Fast when ShiftFreqSel = 1 else
+	        Busy_ActiveHigh;
+	Done <= Done_Slow when ShiftFreqSel = 0 else
+	        Done_Fast when ShiftFreqSel = 1 else
+	        Done_ActiveHigh;
 
 	-- Mux shift register bus signals to Model
-	SerialOut  <= SerialOut_Slow  when ShiftFreqSel = 0 else SerialOut_Fast;
-	ShiftClock <= ShiftClock_Slow when ShiftFreqSel = 0 else ShiftClock_Fast;
-	LatchClock <= LatchClock_Slow when ShiftFreqSel = 0 else LatchClock_Fast;
-	Clear_n    <= Clear_n_Slow    when ShiftFreqSel = 0 else Clear_n_Fast;
+	SerialOut  <= SerialOut_Slow  when ShiftFreqSel = 0 else
+	              SerialOut_Fast  when ShiftFreqSel = 1 else
+	              SerialOut_ActiveHigh;
+	ShiftClock <= ShiftClock_Slow when ShiftFreqSel = 0 else
+	              ShiftClock_Fast when ShiftFreqSel = 1 else
+	              ShiftClock_ActiveHigh;
+	LatchClock <= LatchClock_Slow when ShiftFreqSel = 0 else
+	              LatchClock_Fast when ShiftFreqSel = 1 else
+	              LatchClock_ActiveHigh;
+	-- Note: For DUT 2 (ACTIVE_LOW_CLEAR=FALSE), we invert the signal
+	-- to match the standard SN74AC596 model behavior where SCLR_n='0' clears
+	Clear_n    <= Clear_n_Slow    when ShiftFreqSel = 0 else
+	              Clear_n_Fast    when ShiftFreqSel = 1 else
+	              not Clear_n_ActiveHigh;  -- Invert for model compatibility
+	-- Raw DUT output for test verification (no inversion)
+	Clear_n_Raw <= Clear_n_Slow     when ShiftFreqSel = 0 else
+	               Clear_n_Fast     when ShiftFreqSel = 1 else
+	               Clear_n_ActiveHigh;
 
 	-- =========================================================================
 	-- Verification Model: SN74AC596 Shift Register
@@ -255,6 +307,7 @@ begin
 			Busy             => Busy,
 			Done             => Done,
 			DataToSend       => DataToSend,
+			Clear_n          => Clear_n_Raw,  -- Use raw DUT output for verification
 			ModelParallelOut => ModelParallelOut
 		);
 

@@ -42,14 +42,20 @@ entity io_ShiftRegister_PISO_TestController is
 		Clock           : in  std_logic;
 		Reset           : in  std_logic;
 
-		-- Frequency selection (0 = 5 MHz, 1 = 30 MHz)
-		ShiftFreqSel    : out natural range 0 to 1 := 0;
+		-- DUT selection:
+		--   0 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
+		--   1 = 30 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
+		--   2 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=TRUE
+		ShiftFreqSel    : out natural range 0 to 2 := 0;
 
 		-- DUT control interface
 		Start           : out std_logic := '0';
 		Busy            : in  std_logic;
 		Valid           : in  std_logic;
 		DataReceived    : in  std_logic_vector(7 downto 0);
+
+		-- Shift register bus signals (directly observable)
+		ClockInhibit    : in  std_logic;
 
 		-- Model control interface
 		ModelParallelIn : out std_logic_vector(7 downto 0) := (others => '0')

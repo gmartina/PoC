@@ -64,6 +64,12 @@ RunTest io_ShiftRegister_PISO_Fast.vhdl
 # Daisy chain test at 30 MHz
 RunTest io_ShiftRegister_PISO_DaisyChain_Fast.vhdl
 
+# =============================================================================
+# Signal Polarity Tests
+# Tests the ClockInhibit signal behavior and ACTIVE_LOW_CLK_INHIBIT generic
+# =============================================================================
+RunTest io_ShiftRegister_PISO_ClockInhibit.vhdl
+
 
 # #############################################################################
 # SIPO (Serial-In Parallel-Out) Tests
@@ -108,3 +114,9 @@ RunTest io_ShiftRegister_SIPO_Fast.vhdl
 
 # Daisy chain test at 30 MHz
 RunTest io_ShiftRegister_SIPO_DaisyChain_Fast.vhdl
+
+# =============================================================================
+# Signal Polarity Tests
+# Tests the Clear_n signal behavior and ACTIVE_LOW_CLEAR generic
+# =============================================================================
+RunTest io_ShiftRegister_SIPO_Clear.vhdl
