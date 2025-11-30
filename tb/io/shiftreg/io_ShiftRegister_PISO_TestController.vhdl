@@ -46,7 +46,8 @@ entity io_ShiftRegister_PISO_TestController is
 		--   0 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
 		--   1 = 30 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
 		--   2 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=TRUE
-		ShiftFreqSel    : out natural range 0 to 2 := 0;
+		--   3 = 5 MHz shift clock, ADD_INPUT_SYNCHRONIZERS=TRUE
+		ShiftFreqSel    : out natural range 0 to 3 := 0;
 
 		-- DUT control interface
 		Start           : out std_logic := '0';

@@ -70,7 +70,8 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 	--   0 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
 	--   1 = 30 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=FALSE
 	--   2 = 5 MHz shift clock, ACTIVE_LOW_CLK_INHIBIT=TRUE
-	signal ShiftFreqSel : natural range 0 to 2 := 0;
+	--   3 = 5 MHz shift clock, ADD_INPUT_SYNCHRONIZERS=TRUE
+	signal ShiftFreqSel : natural range 0 to 3 := 0;
 
 	-- DUT interface signals (directly accessible by test controller)
 	signal Start        : std_logic;
@@ -101,7 +102,17 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 	signal SerialClock_ActiveLow                          : std_logic;
 	signal ClockInhibit_Slow, ClockInhibit_Fast           : std_logic;
 	signal ClockInhibit_ActiveLow                         : std_logic;
+	signal ClockInhibit_Sync                              : std_logic;
 	signal SerialIn_Slow, SerialIn_Fast, SerialIn_ActiveLow : std_logic;
+	signal SerialIn_Sync                                  : std_logic;
+
+	-- Per-DUT signals for DUT 3 (ADD_INPUT_SYNCHRONIZERS=TRUE)
+	signal Start_Sync        : std_logic;
+	signal Busy_Sync         : std_logic;
+	signal Valid_Sync        : std_logic;
+	signal DataReceived_Sync : std_logic_vector(BITS - 1 downto 0);
+	signal ShiftLoad_n_Sync  : std_logic;
+	signal SerialClock_Sync  : std_logic;
 
 	-- Model control signals
 	signal ModelParallelIn : std_logic_vector(7 downto 0);
@@ -111,7 +122,7 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 		port (
 			Clock           : in  std_logic;
 			Reset           : in  std_logic;
-			ShiftFreqSel    : out natural range 0 to 2;
+			ShiftFreqSel    : out natural range 0 to 3;
 			Start           : out std_logic;
 			Busy            : in  std_logic;
 			Valid           : in  std_logic;
@@ -251,6 +262,32 @@ begin
 			SerialDataIn => SerialDataIn
 		);
 
+	-- DUT 3: Slow (5 MHz) shift clock with ADD_INPUT_SYNCHRONIZERS = TRUE
+	DUT_Sync : entity PoC.io_ShiftRegister_PISO_Controller
+		generic map (
+			BITS                    => BITS,
+			ACTIVE_LOW_LOAD         => TRUE,
+			ACTIVE_LOW_CLK_INHIBIT  => FALSE,
+			ACTIVE_LOW_DATA         => FALSE,
+			ACTIVE_LOW_SERIAL_IN    => FALSE,
+			CLOCK_FREQ              => CLOCK_FREQ,
+			SHIFT_FREQ              => SHIFT_FREQ_SLOW,
+			ADD_INPUT_SYNCHRONIZERS => TRUE  -- Input synchronizers enabled
+		)
+		port map (
+			Clock        => Clock,
+			Reset        => Reset,
+			Start        => Start_Sync,
+			Busy         => Busy_Sync,
+			Valid        => Valid_Sync,
+			DataReceived => DataReceived_Sync,
+			ShiftLoad_n  => ShiftLoad_n_Sync,
+			SerialClock  => SerialClock_Sync,
+			ClockInhibit => ClockInhibit_Sync,
+			SerialIn     => SerialIn_Sync,
+			SerialDataIn => SerialDataIn
+		);
+
 	-- =========================================================================
 	-- Multiplexers: Select active DUT based on ShiftFreqSel
 	-- =========================================================================
@@ -259,38 +296,47 @@ begin
 	Start_Slow      <= Start when ShiftFreqSel = 0 else '0';
 	Start_Fast      <= Start when ShiftFreqSel = 1 else '0';
 	Start_ActiveLow <= Start when ShiftFreqSel = 2 else '0';
+	Start_Sync      <= Start when ShiftFreqSel = 3 else '0';
 
 	-- Mux outputs from selected DUT
 	Busy         <= Busy_Slow         when ShiftFreqSel = 0 else
 	                Busy_Fast         when ShiftFreqSel = 1 else
-	                Busy_ActiveLow;
+	                Busy_ActiveLow    when ShiftFreqSel = 2 else
+	                Busy_Sync;
 	Valid        <= Valid_Slow        when ShiftFreqSel = 0 else
 	                Valid_Fast        when ShiftFreqSel = 1 else
-	                Valid_ActiveLow;
+	                Valid_ActiveLow   when ShiftFreqSel = 2 else
+	                Valid_Sync;
 	DataReceived <= DataReceived_Slow when ShiftFreqSel = 0 else
 	                DataReceived_Fast when ShiftFreqSel = 1 else
-	                DataReceived_ActiveLow;
+	                DataReceived_ActiveLow when ShiftFreqSel = 2 else
+	                DataReceived_Sync;
 
 	-- Raw ClockInhibit from DUT (for test verification, not inverted)
 	ClockInhibit_Raw <= ClockInhibit_Slow when ShiftFreqSel = 0 else
 	                    ClockInhibit_Fast when ShiftFreqSel = 1 else
-	                    ClockInhibit_ActiveLow;
+	                    ClockInhibit_ActiveLow when ShiftFreqSel = 2 else
+	                    ClockInhibit_Sync;
 
 	-- Mux shift register bus signals to Model
 	ShiftLoad_n  <= ShiftLoad_n_Slow  when ShiftFreqSel = 0 else
 	                ShiftLoad_n_Fast  when ShiftFreqSel = 1 else
-	                ShiftLoad_n_ActiveLow;
+	                ShiftLoad_n_ActiveLow when ShiftFreqSel = 2 else
+	                ShiftLoad_n_Sync;
 	SerialClock  <= SerialClock_Slow  when ShiftFreqSel = 0 else
 	                SerialClock_Fast  when ShiftFreqSel = 1 else
-	                SerialClock_ActiveLow;
+	                SerialClock_ActiveLow when ShiftFreqSel = 2 else
+	                SerialClock_Sync;
 	-- Note: For DUT 2 (ACTIVE_LOW_CLK_INHIBIT=TRUE), we invert the signal
 	-- to match the standard SN74AC165 model behavior where CLK_INH='0' enables clocking
 	ClockInhibit <= ClockInhibit_Slow when ShiftFreqSel = 0 else
 	                ClockInhibit_Fast when ShiftFreqSel = 1 else
-	                not ClockInhibit_ActiveLow;  -- Invert for model compatibility
+	                not ClockInhibit_ActiveLow when ShiftFreqSel = 2 else  -- Invert for model compatibility
+	                ClockInhibit_Sync;
 	SerialIn     <= SerialIn_Slow     when ShiftFreqSel = 0 else
 	                SerialIn_Fast     when ShiftFreqSel = 1 else
-	                SerialIn_ActiveLow;
+	                SerialIn_ActiveLow when ShiftFreqSel = 2 else
+	                SerialIn_Sync;
 
 	-- =========================================================================
 	-- Verification Model: SN74AC165 Shift Register

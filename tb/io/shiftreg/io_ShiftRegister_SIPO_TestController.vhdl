@@ -56,7 +56,8 @@ entity io_ShiftRegister_SIPO_TestController is
 		--   0 = 5 MHz shift clock, ACTIVE_LOW_CLEAR=TRUE
 		--   1 = 30 MHz shift clock, ACTIVE_LOW_CLEAR=TRUE
 		--   2 = 5 MHz shift clock, ACTIVE_LOW_CLEAR=FALSE
-		ShiftFreqSel    : out natural range 0 to 2 := 0;
+		--   3 = 5 MHz shift clock, ADD_OUTPUT_REGISTERS=TRUE
+		ShiftFreqSel    : out natural range 0 to 3 := 0;
 
 		-- DUT control interface
 		Start           : out std_logic := '0';

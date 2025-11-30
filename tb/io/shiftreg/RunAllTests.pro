@@ -70,6 +70,12 @@ RunTest io_ShiftRegister_PISO_DaisyChain_Fast.vhdl
 # =============================================================================
 RunTest io_ShiftRegister_PISO_ClockInhibit.vhdl
 
+# =============================================================================
+# Pipeline Register Tests
+# Tests the ADD_INPUT_SYNCHRONIZERS generic
+# =============================================================================
+RunTest io_ShiftRegister_PISO_InputSync.vhdl
+
 
 # #############################################################################
 # SIPO (Serial-In Parallel-Out) Tests
@@ -120,3 +126,9 @@ RunTest io_ShiftRegister_SIPO_DaisyChain_Fast.vhdl
 # Tests the Clear_n signal behavior and ACTIVE_LOW_CLEAR generic
 # =============================================================================
 RunTest io_ShiftRegister_SIPO_Clear.vhdl
+
+# =============================================================================
+# Pipeline Register Tests
+# Tests the ADD_OUTPUT_REGISTERS generic
+# =============================================================================
+RunTest io_ShiftRegister_SIPO_OutputRegs.vhdl
