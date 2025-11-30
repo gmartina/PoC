@@ -20,3 +20,5 @@
 
 analyze ./shiftreg.pkg.vhdl
 analyze ./io_ShiftRegister_PISO_Controller.vhdl
+analyze ./io_ShiftRegister_SIPO_Controller.vhdl
+

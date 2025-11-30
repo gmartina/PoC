@@ -4,13 +4,14 @@
 -- =============================================================================
 -- Authors:         Gustavo Martin
 --
--- Entity:          io_ShiftRegister_PISO_DaisyChain_TestController
+-- Entity:          io_ShiftRegister_SIPO_DaisyChain_TestController
 --
 -- Description:
 -- -------------------------------------
--- Test controller for the PISO shift register controller in daisy chain mode.
--- This entity defines the interface for test architectures with 24-bit data
--- (3 x 8-bit chips in a daisy chain).
+-- Test controller entity for SIPO shift register daisy chain verification.
+-- This entity defines the interface between the test harness and the test
+-- architectures. Different test architectures can be bound to this entity
+-- for various test scenarios with 3 daisy-chained chips (24 bits total).
 --
 -- License:
 -- =============================================================================
@@ -37,22 +38,27 @@ library osvvm;
 context osvvm.OsvvmContext;
 
 
-entity io_ShiftRegister_PISO_DaisyChain_TestController is
+entity io_ShiftRegister_SIPO_DaisyChain_TestController is
 	port (
-		-- System signals
+		-- System signals from harness
 		Clock           : in  std_logic;
 		Reset           : in  std_logic;
 
-		-- Frequency selection (0 = 5 MHz, 1 = 30 MHz)
-		ShiftFreqSel    : out natural range 0 to 1 := 0;
+		-- Control signals to DUT
+		Start           : out std_logic;
+		DataToSend      : out std_logic_vector(23 downto 0);
 
-		-- DUT control interface
-		Start           : out std_logic := '0';
+		-- Status signals from DUT
 		Busy            : in  std_logic;
-		Valid           : in  std_logic;
-		DataReceived    : in  std_logic_vector(23 downto 0);
+		Done            : in  std_logic;
 
-		-- Model control interface (24 bits for 3 IC)
-		ModelParallelIn : out std_logic_vector(23 downto 0) := (others => '0')
+		-- Data from SN74AC596 models (parallel outputs)
+		ModelParallelOut1 : in  std_logic_vector(7 downto 0);  -- First chip in chain
+		ModelParallelOut2 : in  std_logic_vector(7 downto 0);  -- Second chip in chain
+		ModelParallelOut3 : in  std_logic_vector(7 downto 0);  -- Third chip in chain
+
+		-- Select which shift frequency configuration to use
+		-- 0 = 5 MHz, 1 = 30 MHz
+		ShiftFreqSel    : out natural range 0 to 1
 	);
 end entity;

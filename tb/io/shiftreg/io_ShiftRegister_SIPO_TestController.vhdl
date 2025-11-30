@@ -4,13 +4,22 @@
 -- =============================================================================
 -- Authors:         Gustavo Martin
 --
--- Entity:          io_ShiftRegister_PISO_DaisyChain_TestController
+-- Entity:          io_ShiftRegister_SIPO_TestController
 --
 -- Description:
 -- -------------------------------------
--- Test controller for the PISO shift register controller in daisy chain mode.
--- This entity defines the interface for test architectures with 24-bit data
--- (3 x 8-bit chips in a daisy chain).
+-- Test controller entity for the SIPO shift register controller.
+-- This entity defines the interface for test architectures.
+--
+-- The test controller drives:
+--   - ShiftFreqSel: Selects which DUT frequency to use (0=5MHz, 1=30MHz)
+--   - Start: Initiates a write operation
+--   - DataToSend: Data to be shifted out to the model
+--
+-- And monitors:
+--   - Busy: DUT is performing a shift operation
+--   - Done: DUT has completed the operation
+--   - ModelParallelOut: Data captured by the model (for verification)
 --
 -- License:
 -- =============================================================================
@@ -37,7 +46,7 @@ library osvvm;
 context osvvm.OsvvmContext;
 
 
-entity io_ShiftRegister_PISO_DaisyChain_TestController is
+entity io_ShiftRegister_SIPO_TestController is
 	port (
 		-- System signals
 		Clock           : in  std_logic;
@@ -49,10 +58,10 @@ entity io_ShiftRegister_PISO_DaisyChain_TestController is
 		-- DUT control interface
 		Start           : out std_logic := '0';
 		Busy            : in  std_logic;
-		Valid           : in  std_logic;
-		DataReceived    : in  std_logic_vector(23 downto 0);
+		Done            : in  std_logic;
+		DataToSend      : out std_logic_vector(7 downto 0) := (others => '0');
 
-		-- Model control interface (24 bits for 3 IC)
-		ModelParallelIn : out std_logic_vector(23 downto 0) := (others => '0')
+		-- Model readback interface (from SN74AC596 model)
+		ModelParallelOut : in  std_logic_vector(7 downto 0)
 	);
 end entity;

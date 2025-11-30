@@ -71,6 +71,32 @@ package shiftreg is
 		);
 	end component;
 
+	-- SIPO Controller for shift registers like SN74AC596
+	component io_ShiftRegister_SIPO_Controller is
+		generic (
+			BITS                    : positive := 8;
+			ACTIVE_LOW_CLEAR        : boolean  := TRUE;
+			ACTIVE_LOW_SERIAL_OUT   : boolean  := FALSE;
+			ACTIVE_LOW_LATCH        : boolean  := FALSE;
+			ACTIVE_LOW_SHIFT_CLK    : boolean  := FALSE;
+			CLOCK_FREQ              : FREQ     := 100 MHz;
+			SHIFT_FREQ              : FREQ     := 5 MHz;
+			ADD_OUTPUT_REGISTERS    : boolean  := FALSE
+		);
+		port (
+			Clock       : in  std_logic;
+			Reset       : in  std_logic;
+			Start       : in  std_logic;
+			Busy        : out std_logic;
+			Done        : out std_logic;
+			DataToSend  : in  std_logic_vector(BITS - 1 downto 0);
+			SerialOut   : out std_logic;
+			ShiftClock  : out std_logic;
+			LatchClock  : out std_logic;
+			Clear_n     : out std_logic
+		);
+	end component;
+
 end package;
 
 

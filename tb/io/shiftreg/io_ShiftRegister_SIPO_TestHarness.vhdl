@@ -1,0 +1,261 @@
+-- EMACS settings: -*-  tab-width: 2; indent-tabs-mode: t -*-
+-- vim: tabstop=2:shiftwidth=2:noexpandtab
+-- kate: tab-width 2; replace-tabs off; indent-width 2;
+-- =============================================================================
+-- Authors:         Gustavo Martin
+--
+-- Entity:          io_ShiftRegister_SIPO_TestHarness
+--
+-- Description:
+-- -------------------------------------
+-- Test harness for the SIPO shift register controller.
+-- This connects the DUT (io_ShiftRegister_SIPO_Controller) to the
+-- verification model (SN74AC596_Model) and the test controller.
+--
+-- Supports multiple shift clock frequencies via DUT selection:
+--   - ShiftFreqSel = 0: 5 MHz shift clock (default)
+--   - ShiftFreqSel = 1: 30 MHz shift clock (fast)
+--
+-- The test controller drives ShiftFreqSel to select the desired configuration.
+--
+-- License:
+-- =============================================================================
+-- Copyright 2025-2025 The PoC-Library Authors
+--
+-- Licensed under the Apache License, Version 2.0 (the "License");
+-- you may not use this file except in compliance with the License.
+-- You may obtain a copy of the License at
+--
+--    http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+-- =============================================================================
+
+library IEEE;
+use     IEEE.std_logic_1164.all;
+use     IEEE.numeric_std.all;
+
+library osvvm;
+context osvvm.OsvvmContext;
+
+library PoC;
+use     PoC.physical.all;
+
+
+entity io_ShiftRegister_SIPO_TestHarness is
+end entity;
+
+
+architecture TestHarness of io_ShiftRegister_SIPO_TestHarness is
+	-- Clock and timing constants
+	constant TPERIOD_CLOCK : time := 10 ns;   -- 100 MHz system clock
+	constant CLOCK_FREQ    : FREQ := 100 MHz;
+
+	-- Supported shift frequencies
+	constant SHIFT_FREQ_SLOW : FREQ := 5 MHz;
+	constant SHIFT_FREQ_FAST : FREQ := 30 MHz;
+
+	-- Test configuration
+	constant BITS : positive := 8;
+
+	-- Clock and reset signals
+	signal Clock : std_logic := '1';
+	signal Reset : std_logic := '1';
+
+	-- Frequency selection (driven by test controller)
+	signal ShiftFreqSel : natural range 0 to 1 := 0;
+
+	-- DUT interface signals
+	signal Start      : std_logic;
+	signal Busy       : std_logic;
+	signal Done       : std_logic;
+	signal DataToSend : std_logic_vector(BITS - 1 downto 0);
+
+	-- Shift register bus signals (active, muxed from selected DUT)
+	signal SerialOut   : std_logic;
+	signal ShiftClock  : std_logic;
+	signal LatchClock  : std_logic;
+	signal Clear_n     : std_logic;
+
+	-- Per-DUT signals (one set per frequency)
+	signal Start_Slow, Start_Fast           : std_logic;
+	signal Busy_Slow, Busy_Fast             : std_logic;
+	signal Done_Slow, Done_Fast             : std_logic;
+	signal SerialOut_Slow, SerialOut_Fast   : std_logic;
+	signal ShiftClock_Slow, ShiftClock_Fast : std_logic;
+	signal LatchClock_Slow, LatchClock_Fast : std_logic;
+	signal Clear_n_Slow, Clear_n_Fast       : std_logic;
+
+	-- Model output signals
+	signal ModelParallelOut : std_logic_vector(7 downto 0);
+
+	-- Component declarations
+	component io_ShiftRegister_SIPO_TestController is
+		port (
+			Clock            : in  std_logic;
+			Reset            : in  std_logic;
+			ShiftFreqSel     : out natural range 0 to 1;
+			Start            : out std_logic;
+			Busy             : in  std_logic;
+			Done             : in  std_logic;
+			DataToSend       : out std_logic_vector(7 downto 0);
+			ModelParallelOut : in  std_logic_vector(7 downto 0)
+		);
+	end component;
+
+	component SN74AC596_Model is
+		generic (
+			TPD_SRCK_TO_QH_PRIME : time := 11 ns;
+			TPD_RCK_TO_OUTPUTS   : time := 12 ns;
+			TPD_SCLR_TO_QH_PRIME : time := 10 ns;
+			TSU_SER              : time := 10 ns;
+			TH_SER               : time := 0 ns;
+			TPW_SRCK_HIGH        : time := 6 ns;
+			TPW_SRCK_LOW         : time := 6 ns;
+			TPW_RCK_HIGH         : time := 6 ns;
+			TPW_RCK_LOW          : time := 6 ns;
+			TPW_SCLR_LOW         : time := 10 ns
+		);
+		port (
+			SER         : in  std_logic := '0';
+			SRCK        : in  std_logic := '0';
+			RCK         : in  std_logic := '0';
+			SCLR_n      : in  std_logic := '1';
+			QA          : out std_logic;
+			QB          : out std_logic;
+			QC          : out std_logic;
+			QD          : out std_logic;
+			QE          : out std_logic;
+			QF          : out std_logic;
+			QG          : out std_logic;
+			QH          : out std_logic;
+			ParallelOut : out std_logic_vector(7 downto 0);
+			QH_Prime    : out std_logic
+		);
+	end component;
+
+begin
+	-- Clock generation using OSVVM
+	Osvvm.ClockResetPkg.CreateClock(
+		Clk    => Clock,
+		Period => TPERIOD_CLOCK
+	);
+
+	-- Reset generation using OSVVM
+	Osvvm.ClockResetPkg.CreateReset(
+		Reset       => Reset,
+		ResetActive => '1',
+		Clk         => Clock,
+		Period      => 5 * TPERIOD_CLOCK,
+		tpd         => 0 ns
+	);
+
+	-- =========================================================================
+	-- DUT instances with different shift frequencies
+	-- =========================================================================
+
+	-- DUT 0: Slow (5 MHz) shift clock
+	DUT_Slow : entity PoC.io_ShiftRegister_SIPO_Controller
+		generic map (
+			BITS                    => BITS,
+			ACTIVE_LOW_CLEAR        => TRUE,
+			ACTIVE_LOW_SERIAL_OUT   => FALSE,
+			ACTIVE_LOW_LATCH        => FALSE,
+			ACTIVE_LOW_SHIFT_CLK    => FALSE,
+			CLOCK_FREQ              => CLOCK_FREQ,
+			SHIFT_FREQ              => SHIFT_FREQ_SLOW,
+			ADD_OUTPUT_REGISTERS    => FALSE
+		)
+		port map (
+			Clock       => Clock,
+			Reset       => Reset,
+			Start       => Start_Slow,
+			Busy        => Busy_Slow,
+			Done        => Done_Slow,
+			DataToSend  => DataToSend,
+			SerialOut   => SerialOut_Slow,
+			ShiftClock  => ShiftClock_Slow,
+			LatchClock  => LatchClock_Slow,
+			Clear_n     => Clear_n_Slow
+		);
+
+	-- DUT 1: Fast (30 MHz) shift clock
+	DUT_Fast : entity PoC.io_ShiftRegister_SIPO_Controller
+		generic map (
+			BITS                    => BITS,
+			ACTIVE_LOW_CLEAR        => TRUE,
+			ACTIVE_LOW_SERIAL_OUT   => FALSE,
+			ACTIVE_LOW_LATCH        => FALSE,
+			ACTIVE_LOW_SHIFT_CLK    => FALSE,
+			CLOCK_FREQ              => CLOCK_FREQ,
+			SHIFT_FREQ              => SHIFT_FREQ_FAST,
+			ADD_OUTPUT_REGISTERS    => FALSE
+		)
+		port map (
+			Clock       => Clock,
+			Reset       => Reset,
+			Start       => Start_Fast,
+			Busy        => Busy_Fast,
+			Done        => Done_Fast,
+			DataToSend  => DataToSend,
+			SerialOut   => SerialOut_Fast,
+			ShiftClock  => ShiftClock_Fast,
+			LatchClock  => LatchClock_Fast,
+			Clear_n     => Clear_n_Fast
+		);
+
+	-- =========================================================================
+	-- Multiplexers: Select active DUT based on ShiftFreqSel
+	-- =========================================================================
+
+	-- Route Start to selected DUT
+	Start_Slow <= Start when ShiftFreqSel = 0 else '0';
+	Start_Fast <= Start when ShiftFreqSel = 1 else '0';
+
+	-- Mux outputs from selected DUT
+	Busy <= Busy_Slow when ShiftFreqSel = 0 else Busy_Fast;
+	Done <= Done_Slow when ShiftFreqSel = 0 else Done_Fast;
+
+	-- Mux shift register bus signals to Model
+	SerialOut  <= SerialOut_Slow  when ShiftFreqSel = 0 else SerialOut_Fast;
+	ShiftClock <= ShiftClock_Slow when ShiftFreqSel = 0 else ShiftClock_Fast;
+	LatchClock <= LatchClock_Slow when ShiftFreqSel = 0 else LatchClock_Fast;
+	Clear_n    <= Clear_n_Slow    when ShiftFreqSel = 0 else Clear_n_Fast;
+
+	-- =========================================================================
+	-- Verification Model: SN74AC596 Shift Register
+	-- =========================================================================
+	Model : component SN74AC596_Model
+		generic map (
+			TPD_SRCK_TO_QH_PRIME => 11 ns,
+			TPD_RCK_TO_OUTPUTS   => 12 ns
+		)
+		port map (
+			SER         => SerialOut,
+			SRCK        => ShiftClock,
+			RCK         => LatchClock,
+			SCLR_n      => Clear_n,
+			ParallelOut => ModelParallelOut,
+			QH_Prime    => open  -- Not used for single chip test
+		);
+
+	-- =========================================================================
+	-- Test Controller
+	-- =========================================================================
+	TestCtrl : component io_ShiftRegister_SIPO_TestController
+		port map (
+			Clock            => Clock,
+			Reset            => Reset,
+			ShiftFreqSel     => ShiftFreqSel,
+			Start            => Start,
+			Busy             => Busy,
+			Done             => Done,
+			DataToSend       => DataToSend,
+			ModelParallelOut => ModelParallelOut
+		);
+
+end architecture;

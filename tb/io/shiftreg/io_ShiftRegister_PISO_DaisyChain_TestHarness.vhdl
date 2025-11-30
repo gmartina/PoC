@@ -104,7 +104,7 @@ architecture TestHarness of io_ShiftRegister_PISO_DaisyChain_TestHarness is
 	signal ClockInhibit_Slow, ClockInhibit_Fast : std_logic;
 	signal SerialIn_Slow, SerialIn_Fast         : std_logic;
 
-	-- Model control signals (24 bits total, split across 3 chips)
+	-- Model control signals (24 bits total, split across 3 IC)
 	signal ModelParallelIn : std_logic_vector(TOTAL_BITS - 1 downto 0);
 
 	-- Component declarations

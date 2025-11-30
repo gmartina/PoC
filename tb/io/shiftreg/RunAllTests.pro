@@ -1,7 +1,7 @@
 # =============================================================================
 # Authors:         Gustavo Martin
 #
-# Description:     Run all tests for the PISO shift register controller
+# Description:     Run all tests for the shift register controllers (PISO/SIPO)
 #
 # License:
 # =============================================================================
@@ -20,7 +20,11 @@
 # limitations under the License.
 # =============================================================================
 
-# Analyze the verification model
+# #############################################################################
+# PISO (Parallel-In Serial-Out) Tests
+# #############################################################################
+
+# Analyze the PISO verification model
 analyze SN74AC165_Model.vhdl
 
 # =============================================================================
@@ -37,7 +41,7 @@ analyze io_ShiftRegister_PISO_TestHarness.vhdl
 RunTest io_ShiftRegister_PISO_Simple.vhdl
 
 # =============================================================================
-# Daisy Chain Tests (24-bit, 3 chips)
+# Daisy Chain Tests (24-bit, 3 IC)
 # =============================================================================
 
 # Analyze the daisy chain test controller entity
@@ -60,3 +64,47 @@ RunTest io_ShiftRegister_PISO_Fast.vhdl
 # Daisy chain test at 30 MHz
 RunTest io_ShiftRegister_PISO_DaisyChain_Fast.vhdl
 
+
+# #############################################################################
+# SIPO (Serial-In Parallel-Out) Tests
+# #############################################################################
+
+# Analyze the SIPO verification model
+analyze SN74AC596_Model.vhdl
+
+# =============================================================================
+# Single Chip Tests (8-bit)
+# =============================================================================
+
+# Analyze the test controller entity
+analyze io_ShiftRegister_SIPO_TestController.vhdl
+
+# Analyze the test harness
+analyze io_ShiftRegister_SIPO_TestHarness.vhdl
+
+# Run single chip tests
+RunTest io_ShiftRegister_SIPO_Simple.vhdl
+
+# =============================================================================
+# Daisy Chain Tests (24-bit, 3 IC)
+# =============================================================================
+
+# Analyze the daisy chain test controller entity
+analyze io_ShiftRegister_SIPO_DaisyChain_TestController.vhdl
+
+# Analyze the daisy chain test harness
+analyze io_ShiftRegister_SIPO_DaisyChain_TestHarness.vhdl
+
+# Run daisy chain tests
+RunTest io_ShiftRegister_SIPO_DaisyChain.vhdl
+
+# =============================================================================
+# Fast Clock Tests (30 MHz shift clock)
+# Uses ShiftFreqSel signal to select the 30 MHz DUT in the harness
+# =============================================================================
+
+# Single chip test at 30 MHz
+RunTest io_ShiftRegister_SIPO_Fast.vhdl
+
+# Daisy chain test at 30 MHz
+RunTest io_ShiftRegister_SIPO_DaisyChain_Fast.vhdl
