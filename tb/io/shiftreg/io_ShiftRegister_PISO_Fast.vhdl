@@ -4,15 +4,14 @@
 -- =============================================================================
 -- Authors:         Gustavo Martin
 --
--- Entity:          io_ShiftRegister_PISO_Simple
+-- Entity:          io_ShiftRegister_PISO_Fast
 --
 -- Description:
 -- -------------------------------------
--- Simple test case for the PISO shift register controller.
--- This test verifies basic functionality:
---   1. Single read operation with known data
---   2. Multiple consecutive reads with different data patterns
---   3. Boundary value tests (all zeros, all ones, alternating bits)
+-- Fast (30 MHz shift clock) test case for the PISO shift register controller.
+-- This test verifies the controller operates correctly at higher clock speeds.
+--
+-- Sets ShiftFreqSel = 1 to select the 30 MHz DUT in the test harness.
 --
 -- License:
 -- =============================================================================
@@ -44,7 +43,7 @@ use     PoC.vectors.all;
 use     PoC.strings.all;
 
 
-architecture Simple of io_ShiftRegister_PISO_TestController is
+architecture Fast of io_ShiftRegister_PISO_TestController is
 	-- Test synchronization barrier
 	signal TestDone : integer_barrier := 1;
 
@@ -59,7 +58,7 @@ begin
 		constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
 		constant TIMEOUT : time := 100 ms;
 	begin
-		SetTestName("io_ShiftRegister_PISO_Simple");
+		SetTestName("io_ShiftRegister_PISO_Fast");
 
 		-- Configure logging
 		SetLogEnable(PASSED, FALSE);
@@ -164,14 +163,14 @@ begin
 		-- Initialize outputs
 		Start           <= '0';
 		ModelParallelIn <= (others => '0');
-		ShiftFreqSel    <= 0;  -- Use 5 MHz shift clock
+		ShiftFreqSel    <= 1;  -- Use 30 MHz shift clock
 
 		-- Wait for reset to deassert
 		wait until Reset = '0';
 		WaitForClock(Clock, 5);
 
-		Log(ProcID, "Starting PISO Shift Register Controller Tests (5 MHz)", INFO);
-		Log(ProcID, "==============================================", INFO);
+		Log(ProcID, "Starting PISO Shift Register Controller Tests (30 MHz)", INFO);
+		Log(ProcID, "========================================================", INFO);
 
 		-- Run through all test patterns
 		for i in TEST_PATTERNS'range loop
@@ -179,9 +178,8 @@ begin
 			TestRead(TEST_PATTERNS(i).Data, "Pattern " & to_string(i));
 		end loop;
 
-
-		Log(ProcID, "==============================================", INFO);
-		Log(ProcID, "All tests completed successfully!", INFO);
+		Log(ProcID, "========================================================", INFO);
+		Log(ProcID, "All 30 MHz tests completed successfully!", INFO);
 
 		-- Signal test completion
 		WaitForBarrier(TestDone);
@@ -192,14 +190,12 @@ end architecture;
 
 
 -- =============================================================================
--- Configuration: Binds the Simple test architecture to the test harness
--- Uses default SHIFT_FREQ of 5 MHz
+-- Configuration: Binds the Fast architecture to the test harness
 -- =============================================================================
-configuration io_ShiftRegister_PISO_Simple of io_ShiftRegister_PISO_TestHarness is
+configuration io_ShiftRegister_PISO_Fast of io_ShiftRegister_PISO_TestHarness is
 	for TestHarness
 		for TestCtrl : io_ShiftRegister_PISO_TestController
-			use entity work.io_ShiftRegister_PISO_TestController(Simple);
+			use entity work.io_ShiftRegister_PISO_TestController(Fast);
 		end for;
 	end for;
 end configuration;
-

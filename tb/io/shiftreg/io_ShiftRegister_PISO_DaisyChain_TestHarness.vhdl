@@ -4,13 +4,21 @@
 -- =============================================================================
 -- Authors:         Gustavo Martin
 --
--- Entity:          io_ShiftRegister_PISO_TestHarness
+-- Entity:          io_ShiftRegister_PISO_DaisyChain_TestHarness
 --
 -- Description:
 -- -------------------------------------
--- Test harness for the PISO shift register controller.
--- This connects the DUT (io_ShiftRegister_PISO_Controller) to the
--- verification model (SN74AC165_Model) and the test controller.
+-- Test harness for the PISO shift register controller in daisy chain mode.
+-- This connects the DUT (io_ShiftRegister_PISO_Controller configured for 24 bits)
+-- to three cascaded SN74AC165_Model instances and the test controller.
+--
+-- Daisy Chain Configuration:
+--   [Chip 0] --> [Chip 1] --> [Chip 2] --> Controller
+--   (LSB)                      (MSB)
+--
+--   - Chip 0: Bits 7:0   (first loaded, shifted out last)
+--   - Chip 1: Bits 15:8  (middle chip)
+--   - Chip 2: Bits 23:16 (last chip, QH connects to controller)
 --
 -- Supports multiple shift clock frequencies via DUT selection:
 --   - ShiftFreqSel = 0: 5 MHz shift clock (default)
@@ -46,11 +54,11 @@ library PoC;
 use     PoC.physical.all;
 
 
-entity io_ShiftRegister_PISO_TestHarness is
+entity io_ShiftRegister_PISO_DaisyChain_TestHarness is
 end entity;
 
 
-architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
+architecture TestHarness of io_ShiftRegister_PISO_DaisyChain_TestHarness is
 	-- Clock and timing constants
 	constant TPERIOD_CLOCK : time := 10 ns;   -- 100 MHz system clock
 	constant CLOCK_FREQ    : FREQ := 100 MHz;
@@ -59,8 +67,10 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 	constant SHIFT_FREQ_SLOW : FREQ := 5 MHz;
 	constant SHIFT_FREQ_FAST : FREQ := 30 MHz;
 
-	-- Test configuration
-	constant BITS : positive := 8;
+	-- Daisy chain configuration
+	constant NUM_CHIPS     : positive := 3;
+	constant BITS_PER_CHIP : positive := 8;
+	constant TOTAL_BITS    : positive := NUM_CHIPS * BITS_PER_CHIP;  -- 24 bits
 
 	-- Clock and reset signals
 	signal Clock : std_logic := '1';
@@ -69,35 +79,36 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 	-- Frequency selection (driven by test controller)
 	signal ShiftFreqSel : natural range 0 to 1 := 0;
 
-	-- DUT interface signals (directly accessible by test controller)
+	-- DUT interface signals
 	signal Start        : std_logic;
 	signal Busy         : std_logic;
 	signal Valid        : std_logic;
-	signal DataReceived : std_logic_vector(BITS - 1 downto 0);
+	signal DataReceived : std_logic_vector(TOTAL_BITS - 1 downto 0);
 
-	-- Shift register bus signals
+	-- Shift register bus signals (active, muxed from selected DUT)
 	signal ShiftLoad_n   : std_logic;
 	signal SerialClock   : std_logic;
 	signal ClockInhibit  : std_logic;
 	signal SerialIn      : std_logic;
-	signal SerialDataIn  : std_logic;
-	signal SerialDataIn_n : std_logic;
+
+	-- Inter-chip serial connections
+	signal SerialChain   : std_logic_vector(NUM_CHIPS downto 0);
 
 	-- Per-DUT signals (one set per frequency)
 	signal Start_Slow, Start_Fast               : std_logic;
 	signal Busy_Slow, Busy_Fast                 : std_logic;
 	signal Valid_Slow, Valid_Fast               : std_logic;
-	signal DataReceived_Slow, DataReceived_Fast : std_logic_vector(BITS - 1 downto 0);
+	signal DataReceived_Slow, DataReceived_Fast : std_logic_vector(TOTAL_BITS - 1 downto 0);
 	signal ShiftLoad_n_Slow, ShiftLoad_n_Fast   : std_logic;
 	signal SerialClock_Slow, SerialClock_Fast   : std_logic;
 	signal ClockInhibit_Slow, ClockInhibit_Fast : std_logic;
 	signal SerialIn_Slow, SerialIn_Fast         : std_logic;
 
-	-- Model control signals
-	signal ModelParallelIn : std_logic_vector(7 downto 0);
+	-- Model control signals (24 bits total, split across 3 chips)
+	signal ModelParallelIn : std_logic_vector(TOTAL_BITS - 1 downto 0);
 
 	-- Component declarations
-	component io_ShiftRegister_PISO_TestController is
+	component io_ShiftRegister_PISO_DaisyChain_TestController is
 		port (
 			Clock           : in  std_logic;
 			Reset           : in  std_logic;
@@ -105,8 +116,8 @@ architecture TestHarness of io_ShiftRegister_PISO_TestHarness is
 			Start           : out std_logic;
 			Busy            : in  std_logic;
 			Valid           : in  std_logic;
-			DataReceived    : in  std_logic_vector(7 downto 0);
-			ModelParallelIn : out std_logic_vector(7 downto 0)
+			DataReceived    : in  std_logic_vector(23 downto 0);
+			ModelParallelIn : out std_logic_vector(23 downto 0)
 		);
 	end component;
 
@@ -165,7 +176,7 @@ begin
 	-- DUT 0: Slow (5 MHz) shift clock
 	DUT_Slow : entity PoC.io_ShiftRegister_PISO_Controller
 		generic map (
-			BITS                    => BITS,
+			BITS                    => TOTAL_BITS,
 			ACTIVE_LOW_LOAD         => TRUE,
 			ACTIVE_LOW_CLK_INHIBIT  => FALSE,
 			ACTIVE_LOW_DATA         => FALSE,
@@ -185,13 +196,13 @@ begin
 			SerialClock  => SerialClock_Slow,
 			ClockInhibit => ClockInhibit_Slow,
 			SerialIn     => SerialIn_Slow,
-			SerialDataIn => SerialDataIn
+			SerialDataIn => SerialChain(NUM_CHIPS)
 		);
 
 	-- DUT 1: Fast (30 MHz) shift clock
 	DUT_Fast : entity PoC.io_ShiftRegister_PISO_Controller
 		generic map (
-			BITS                    => BITS,
+			BITS                    => TOTAL_BITS,
 			ACTIVE_LOW_LOAD         => TRUE,
 			ACTIVE_LOW_CLK_INHIBIT  => FALSE,
 			ACTIVE_LOW_DATA         => FALSE,
@@ -211,7 +222,7 @@ begin
 			SerialClock  => SerialClock_Fast,
 			ClockInhibit => ClockInhibit_Fast,
 			SerialIn     => SerialIn_Fast,
-			SerialDataIn => SerialDataIn
+			SerialDataIn => SerialChain(NUM_CHIPS)
 		);
 
 	-- =========================================================================
@@ -227,35 +238,44 @@ begin
 	Valid        <= Valid_Slow        when ShiftFreqSel = 0 else Valid_Fast;
 	DataReceived <= DataReceived_Slow when ShiftFreqSel = 0 else DataReceived_Fast;
 
-	-- Mux shift register bus signals to Model
+	-- Mux shift register bus signals to Model chain
 	ShiftLoad_n  <= ShiftLoad_n_Slow  when ShiftFreqSel = 0 else ShiftLoad_n_Fast;
 	SerialClock  <= SerialClock_Slow  when ShiftFreqSel = 0 else SerialClock_Fast;
 	ClockInhibit <= ClockInhibit_Slow when ShiftFreqSel = 0 else ClockInhibit_Fast;
 	SerialIn     <= SerialIn_Slow     when ShiftFreqSel = 0 else SerialIn_Fast;
 
 	-- =========================================================================
-	-- Verification Model: SN74AC165 Shift Register
+	-- Verification Models: Daisy chain of SN74AC165 Shift Registers
 	-- =========================================================================
-	Model : component SN74AC165_Model
-		generic map (
-			TPD_SH_LD_TO_QH => 12 ns,
-			TPD_CLK_TO_QH   => 11 ns
-		)
-		port map (
-			ParallelIn => ModelParallelIn,
-			UseVector  => TRUE,
-			SH_LD_n    => ShiftLoad_n,
-			CLK        => SerialClock,
-			CLK_INH    => ClockInhibit,
-			SER        => SerialIn,
-			QH         => SerialDataIn,
-			QH_n       => SerialDataIn_n
-		);
+
+	-- Serial input to first chip comes from controller
+	SerialChain(0) <= SerialIn;
+
+	-- Generate daisy chain of SN74AC165 models
+	-- Chip 0 holds bits 7:0, Chip 1 holds bits 15:8, Chip 2 holds bits 23:16
+	-- Data shifts from Chip 0 -> Chip 1 -> Chip 2 -> Controller
+	gen_chain : for i in 0 to NUM_CHIPS - 1 generate
+		Model_inst : component SN74AC165_Model
+			generic map (
+				TPD_SH_LD_TO_QH => 12 ns,
+				TPD_CLK_TO_QH   => 11 ns
+			)
+			port map (
+				ParallelIn => ModelParallelIn((i + 1) * BITS_PER_CHIP - 1 downto i * BITS_PER_CHIP),
+				UseVector  => TRUE,
+				SH_LD_n    => ShiftLoad_n,
+				CLK        => SerialClock,
+				CLK_INH    => ClockInhibit,
+				SER        => SerialChain(i),
+				QH         => SerialChain(i + 1),
+				QH_n       => open
+			);
+	end generate;
 
 	-- =========================================================================
 	-- Test Controller
 	-- =========================================================================
-	TestCtrl : component io_ShiftRegister_PISO_TestController
+	TestCtrl : component io_ShiftRegister_PISO_DaisyChain_TestController
 		port map (
 			Clock           => Clock,
 			Reset           => Reset,

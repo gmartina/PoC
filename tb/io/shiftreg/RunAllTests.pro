@@ -23,11 +23,40 @@
 # Analyze the verification model
 analyze SN74AC165_Model.vhdl
 
+# =============================================================================
+# Single Chip Tests (8-bit)
+# =============================================================================
+
 # Analyze the test controller entity
 analyze io_ShiftRegister_PISO_TestController.vhdl
 
 # Analyze the test harness
 analyze io_ShiftRegister_PISO_TestHarness.vhdl
 
-# Run tests
+# Run single chip tests
 RunTest io_ShiftRegister_PISO_Simple.vhdl
+
+# =============================================================================
+# Daisy Chain Tests (24-bit, 3 chips)
+# =============================================================================
+
+# Analyze the daisy chain test controller entity
+analyze io_ShiftRegister_PISO_DaisyChain_TestController.vhdl
+
+# Analyze the daisy chain test harness
+analyze io_ShiftRegister_PISO_DaisyChain_TestHarness.vhdl
+
+# Run daisy chain tests
+RunTest io_ShiftRegister_PISO_DaisyChain.vhdl
+
+# =============================================================================
+# Fast Clock Tests (30 MHz shift clock)
+# Uses ShiftFreqSel signal to select the 30 MHz DUT in the harness
+# =============================================================================
+
+# Single chip test at 30 MHz
+RunTest io_ShiftRegister_PISO_Fast.vhdl
+
+# Daisy chain test at 30 MHz
+RunTest io_ShiftRegister_PISO_DaisyChain_Fast.vhdl
+

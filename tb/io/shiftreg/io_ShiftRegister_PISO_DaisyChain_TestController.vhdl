@@ -4,12 +4,13 @@
 -- =============================================================================
 -- Authors:         Gustavo Martin
 --
--- Entity:          io_ShiftRegister_PISO_TestController
+-- Entity:          io_ShiftRegister_PISO_DaisyChain_TestController
 --
 -- Description:
 -- -------------------------------------
--- Test controller for the PISO shift register controller.
--- This entity defines the interface for test architectures.
+-- Test controller for the PISO shift register controller in daisy chain mode.
+-- This entity defines the interface for test architectures with 24-bit data
+-- (3 x 8-bit chips in a daisy chain).
 --
 -- License:
 -- =============================================================================
@@ -36,7 +37,7 @@ library osvvm;
 context osvvm.OsvvmContext;
 
 
-entity io_ShiftRegister_PISO_TestController is
+entity io_ShiftRegister_PISO_DaisyChain_TestController is
 	port (
 		-- System signals
 		Clock           : in  std_logic;
@@ -49,9 +50,9 @@ entity io_ShiftRegister_PISO_TestController is
 		Start           : out std_logic := '0';
 		Busy            : in  std_logic;
 		Valid           : in  std_logic;
-		DataReceived    : in  std_logic_vector(7 downto 0);
+		DataReceived    : in  std_logic_vector(23 downto 0);
 
-		-- Model control interface
-		ModelParallelIn : out std_logic_vector(7 downto 0) := (others => '0')
+		-- Model control interface (24 bits for 3 chips)
+		ModelParallelIn : out std_logic_vector(23 downto 0) := (others => '0')
 	);
 end entity;
