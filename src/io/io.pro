@@ -52,6 +52,7 @@ if { $::poc::vendor eq "Xilinx" } {
 
 include ./uart/uart.pro
 include ./iic/iic.pro
+include ./shiftreg/shiftreg.pro
 
 analyze ./pmod/pmod.pkg.vhdl
 analyze ./pmod/pmod_KYPD.vhdl
