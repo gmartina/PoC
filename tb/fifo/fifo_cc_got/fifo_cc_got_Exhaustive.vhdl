@@ -69,7 +69,7 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 500 ms;
   begin
-    SetTestName("fifo_cc_got_Exhaustive_Config" & integer'image(tConfigIndex'pos(CONFIG_INDEX)));
+    SetTestName("fifo_cc_got_Exhaustive");
 
     SetLogEnable(PASSED, FALSE);
     SetLogEnable(INFO,   TRUE);
@@ -248,6 +248,7 @@ begin
     constant ProcID   : AlertLogIDType := NewID("ReaderProc", TCID);
     variable Expected : tDataWord;
     variable RandGen  : RandomPType;
+    variable ReadData : tDataWord;
   begin
     got <= '0';
     wait until Reset = '0';
@@ -257,41 +258,44 @@ begin
     -- Keep reading until writer is done and scoreboard is empty
     ReadLoop: while (WriterDone = '0') or (valid = '1') loop
       
-      -- Wait for valid data at clock edge (data is stable after this)
-      wait until rising_edge(Clock);
-      
-      if valid = '1' then
-        -- Sample state coverage
-        if full = '1' then
-          StateCov.ICover((1, 1));
-        else
-          StateCov.ICover((0, 1));
-        end if;
-        FstateCov.ICover(to_integer(unsigned(fstate_rd)));
-        
-        -- Get expected value from scoreboard and verify
-        if not FifoSB.Empty then
-          Expected := FifoSB.Pop;
-          
-          AffirmIf(ProcID,
-            dout = Expected,
-            "Data mismatch: Got 0x" & to_hstring(dout) &
-            ", Expected 0x" & to_hstring(Expected) &
-            " [" & ConfigToString(CONFIG_INDEX) & "]"
-          );
-        end if;
-        
-        -- Assert got to acknowledge data
-        got <= '1';
-        OpCov.ICover(2);  -- Got only
-        wait until rising_edge(Clock);
-        got <= '0';
-        
-        -- Random delay between reads  
-        for d in 1 to RandGen.RandInt(0, 2) loop
-          wait until rising_edge(Clock);
-        end loop;
+      -- Wait for valid data
+      if valid = '0' then
+        wait until rising_edge(Clock) and valid = '1';
       end if;
+      
+      -- Sample state coverage
+      if full = '1' then
+        StateCov.ICover((1, 1));
+      else
+        StateCov.ICover((0, 1));
+      end if;
+      FstateCov.ICover(to_integer(unsigned(fstate_rd)));
+      
+      -- Capture data BEFORE asserting got (data is valid now)
+      ReadData := dout;
+      
+      -- Get expected value from scoreboard and verify
+      if not FifoSB.Empty then
+        Expected := FifoSB.Pop;
+        
+        AffirmIf(ProcID,
+          ReadData = Expected,
+          "Data mismatch: Got 0x" & to_hstring(ReadData) &
+          ", Expected 0x" & to_hstring(Expected) &
+          " [" & ConfigToString(CONFIG_INDEX) & "]"
+        );
+      end if;
+      
+      -- Assert got to acknowledge data and advance FIFO
+      got <= '1';
+      OpCov.ICover(2);  -- Got only
+      wait until rising_edge(Clock);
+      got <= '0';
+      
+      -- Random delay between reads  
+      for d in 1 to RandGen.RandInt(0, 2) loop
+        wait until rising_edge(Clock);
+      end loop;
       
     end loop ReadLoop;
 

@@ -61,7 +61,7 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 100 ms;
   begin
-    SetTestName("fifo_cc_got_Simple_Config" & integer'image(tConfigIndex'pos(CONFIG_INDEX)));
+    SetTestName("fifo_cc_got_Simple");
 
     SetLogEnable(PASSED, FALSE);
     SetLogEnable(INFO,   FALSE);
@@ -207,8 +207,8 @@ begin
 
 end architecture;
 
--- Configuration for Simple test with CONFIG_INDEX=0
-configuration fifo_cc_got_Simple_Config0 of fifo_cc_got_TestHarness is
+-- Configuration for Simple test
+configuration fifo_cc_got_Simple of fifo_cc_got_TestHarness is
   for TestHarness
     for TestCtrl : fifo_cc_got_TestController
       use entity work.fifo_cc_got_TestController(Simple);

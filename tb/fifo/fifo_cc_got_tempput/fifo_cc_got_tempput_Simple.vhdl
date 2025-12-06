@@ -62,7 +62,7 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 100 ms;
   begin
-    SetTestName("fifo_cc_got_tempput_Simple_Config" & integer'image(tConfigIndex'pos(CONFIG_INDEX)));
+    SetTestName("fifo_cc_got_tempput_Simple");
 
     SetLogEnable(PASSED, FALSE);
     SetLogEnable(INFO,   TRUE);
