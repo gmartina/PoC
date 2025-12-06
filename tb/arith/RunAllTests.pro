@@ -32,3 +32,12 @@ include ./convert_bin2bcd/RunAllTests.pro
 include ./div/RunAllTests.pro
 include ./firstone/RunAllTests.pro
 include ./scaler/RunAllTests.pro
+include ./same/RunAllTests.pro
+include ./counter_ring/RunAllTests.pro
+include ./counter_gray/RunAllTests.pro
+include ./counter_free/RunAllTests.pro
+include ./carrychain_inc/RunAllTests.pro
+include ./cca/RunAllTests.pro
+include ./shifter_barrel/RunAllTests.pro
+include ./sqrt/RunAllTests.pro
+include ./trng/RunAllTests.pro
