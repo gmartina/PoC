@@ -2,8 +2,7 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:					Gustavo Martin
 --
 -- Package:					fifo_cc_got_TestController_pkg
 --
@@ -54,23 +53,8 @@ package fifo_cc_got_TestController_pkg is
   function GetOutputReg(idx : tConfigIndex) return boolean;
   function ConfigToString(idx : tConfigIndex) return string;
 
-  -- Data word type
+  -- Data word type (only used in TestHarness for signal declarations)
   subtype tDataWord is std_logic_vector(D_BITS-1 downto 0);
-  
-  -- FIFO interface record type for cleaner port mapping
-  type tFifoWriteInterface is record
-    put       : std_logic;
-    din       : tDataWord;
-    full      : std_logic;
-    estate_wr : std_logic_vector(ESTATE_WR_BITS-1 downto 0);
-  end record;
-  
-  type tFifoReadInterface is record
-    got       : std_logic;
-    dout      : tDataWord;
-    valid     : std_logic;
-    fstate_rd : std_logic_vector(FSTATE_RD_BITS-1 downto 0);
-  end record;
 
 end package;
 

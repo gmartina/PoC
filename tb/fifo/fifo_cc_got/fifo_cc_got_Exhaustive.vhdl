@@ -2,20 +2,23 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
+-- Authors:         Thomas B. Preusser
 --                  Gustavo Martin
 --
--- Architecture:		fifo_cc_got_Exhaustive
+-- Architecture:    fifo_cc_got_Exhaustive
 --
 -- Description:
 -- -------------------------------------
--- Exhaustive OSVVM test for fifo_cc_got
--- Tests all FIFO operations with extensive coverage:
+-- Exhaustive OSVVM test for fifo_cc_got using Verification Components
+-- Uses Transaction interface to communicate with VCs for:
 -- - Full/Empty transitions
 -- - Back-to-back operations
--- - Random patterns
--- - State indicator verification
--- Uses OSVVM Scoreboard and Functional Coverage
+-- - Burst operations with PushBurstIncrement/PushBurstRandom
+-- - State indicator verification via GetFifoStatus
+-- - Simultaneous read/write stress testing
+--
+-- Uses OSVVM FifoFillPkg for sophisticated burst patterns
+-- Uses cross-coverage for state combinations
 --
 -- License:
 -- =============================================================================
@@ -25,7 +28,7 @@
 -- you may not use this file except in compliance with the License.
 -- You may obtain a copy of the License at
 --
---		http://www.apache.org/licenses/LICENSE-2.0
+--    http://www.apache.org/licenses/LICENSE-2.0
 --
 -- Unless required by applicable law or agreed to in writing, software
 -- distributed under the License is distributed on an "AS IS" BASIS,
@@ -40,26 +43,34 @@ use     IEEE.numeric_std.all;
 
 library osvvm;
 context osvvm.OsvvmContext;
+use     osvvm.ScoreboardPkg_slv.all;
+
+library osvvm_common;
+context osvvm_common.OsvvmCommonContext;
+use     osvvm_common.FifoFillPkg_slv.all;
 
 use     work.fifo_cc_got_TestController_pkg.all;
 
 architecture Exhaustive of fifo_cc_got_TestController is
-  -- Test synchronization
-  signal TestDone     : integer_barrier := 1;
-  signal WriterDone   : std_logic := '0';
+  -- Phase synchronization barriers
+  signal TestDone   : integer_barrier := 1;
+  signal Phase1Done : integer_barrier := 1;
+  signal Phase2Done : integer_barrier := 1;
+  signal Phase3Done : integer_barrier := 1;
+  signal Phase4Done : integer_barrier := 1;
 
   -- Alert/Log IDs
   constant TCID : AlertLogIDType := NewID("FifoCcGotExhaustive_" & ConfigToString(CONFIG_INDEX));
 
-  -- Scoreboard for FIFO data verification
-  shared variable FifoSB : osvvm.ScoreboardPkg_slv.ScoreboardPType;
+  -- Burst FIFOs for data generation
+  shared variable TxBurstFifo : ScoreboardIdType;
+  shared variable RxBurstFifo : ScoreboardIdType;
 
   -- Functional Coverage
-  shared variable StateCov   : CovPType;  -- Full/Empty/Valid state coverage
-  shared variable OpCov      : CovPType;  -- Operation coverage (put, got, simultaneous)
+  shared variable StateCov   : CovPType;  -- Full/Valid cross-coverage
+  shared variable OpCov      : CovPType;  -- Operation coverage
   shared variable FillCov    : CovPType;  -- Fill level coverage
-  shared variable EstateCov  : CovPType;  -- Empty state bits coverage
-  shared variable FstateCov  : CovPType;  -- Full state bits coverage
+  shared variable TransCov   : CovPType;  -- Transition coverage
 
 begin
   ----------------------------------------------------------------------------
@@ -69,7 +80,7 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 500 ms;
   begin
-    SetTestName("fifo_cc_got_Exhaustive");
+    SetTestName("fifo_cc_got_Exhaustive_" & ConfigToString(CONFIG_INDEX));
 
     SetLogEnable(PASSED, FALSE);
     SetLogEnable(INFO,   TRUE);
@@ -79,40 +90,42 @@ begin
     TranscriptOpen;
     SetTranscriptMirror(TRUE);
 
-    -- Initialize State Coverage (full, valid, empty combinations)
-    StateCov.AddCross("State_Full_Valid",
+    -- Initialize Burst FIFOs
+    TxBurstFifo := NewID("TxBurstFifo", TCID);
+    RxBurstFifo := NewID("RxBurstFifo", TCID);
+
+    -- Initialize State Cross-Coverage (full x valid)
+    StateCov.AddCross("Full_Valid_Cross",
       GenBin(0, 1),   -- full
       GenBin(0, 1)    -- valid
     );
-    StateCov.SetName("StateCoverage");
+    StateCov.SetName("StateCrossCoverage");
 
     -- Initialize Operation Coverage
-    OpCov.AddBins("Put_Only",         GenBin(1));  -- put without got
-    OpCov.AddBins("Got_Only",         GenBin(2));  -- got without put
-    OpCov.AddBins("Put_Got_Simul",    GenBin(3));  -- simultaneous put and got
-    OpCov.AddBins("Idle",             GenBin(0));  -- no operation
+    OpCov.AddBins("Send",          GenBin(1));
+    OpCov.AddBins("Check",         GenBin(2));
+    OpCov.AddBins("SendBurst",     GenBin(3));
+    OpCov.AddBins("CheckBurst",    GenBin(4));
+    OpCov.AddBins("TrySend",       GenBin(5));
+    OpCov.AddBins("TryCheck",      GenBin(6));
     OpCov.SetName("OperationCoverage");
 
-    -- Initialize Fill Level Coverage (bins of 4)
+    -- Initialize Fill Level Coverage
     for i in 0 to MIN_DEPTH/4 loop
-      FillCov.AddBins("Fill_" & integer'image(i*4) & "_to_" & integer'image((i+1)*4-1),
-        GenBin(i*4, (i+1)*4-1));
+      FillCov.AddBins("Fill_" & integer'image(i*4) & "_to_" & integer'image(minimum((i+1)*4-1, MIN_DEPTH)),
+        GenBin(i*4, minimum((i+1)*4-1, MIN_DEPTH)));
     end loop;
     FillCov.SetName("FillLevelCoverage");
 
-    -- Initialize Estate (empty state) Coverage
-    for i in 0 to 2**ESTATE_WR_BITS-1 loop
-      EstateCov.AddBins("Estate_" & integer'image(i), GenBin(i));
-    end loop;
-    EstateCov.SetName("EstateWrCoverage");
+    -- Initialize Transition Coverage
+    TransCov.AddBins("Empty_to_Filling",     GenBin(1));
+    TransCov.AddBins("Filling_to_Full",      GenBin(2));
+    TransCov.AddBins("Full_to_Draining",     GenBin(3));
+    TransCov.AddBins("Draining_to_Empty",    GenBin(4));
+    TransCov.AddBins("Steady_State",         GenBin(5));
+    TransCov.SetName("TransitionCoverage");
 
-    -- Initialize Fstate (full state) Coverage
-    for i in 0 to 2**FSTATE_RD_BITS-1 loop
-      FstateCov.AddBins("Fstate_" & integer'image(i), GenBin(i));
-    end loop;
-    FstateCov.SetName("FstateRdCoverage");
-
-    wait until Reset = '0';
+    wait until nReset = '1';
     ClearAlerts;
 
     WaitForBarrier(TestDone, TIMEOUT);
@@ -124,184 +137,226 @@ begin
     StateCov.WriteBin;
     OpCov.WriteBin;
     FillCov.WriteBin;
-    EstateCov.WriteBin;
-    FstateCov.WriteBin;
+    TransCov.WriteBin;
 
     EndOfTestReports(ReportAll => TRUE);
     std.env.stop;
   end process;
 
   ----------------------------------------------------------------------------
-  -- Writer Process - generates data patterns and writes to FIFO
+  -- Writer Process - uses Transaction interface to send data
   ----------------------------------------------------------------------------
   WriterProc : process
     constant ProcID   : AlertLogIDType := NewID("WriterProc", TCID);
-    variable DataVal  : unsigned(D_BITS-1 downto 0);
-    variable RandGen  : RandomPType;
-    variable OpCode   : integer;
+    variable WriteCount : integer := 0;
+    variable FifoStatus : FifoStatusType;
+    variable SendOk     : boolean;
   begin
-    put <= '0';
-    din <= (others => '-');
-    WriterDone <= '0';
-    wait until Reset = '0';
-    WaitForClock(Clock);
+    wait until nReset = '1';
+    WaitForClock(TxRec, 2);
 
-    RandGen.InitSeed(tConfigIndex'pos(CONFIG_INDEX) + 123);
+    -- Assign BurstFifo to transaction record
+    TxRec.BurstFifo <= TxBurstFifo;
 
     ---------------------------------------------------------------------------
-    -- Test Phase 1: Fill to full, verify full flag
+    -- Phase 1: Fill FIFO to capacity using Send()
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 1: Fill FIFO to capacity", INFO);
-    DataVal := (others => '0');
+    Log(ProcID, "Phase 1: Fill FIFO to capacity via Send()", INFO);
     
-    while full = '0' loop
-      din <= std_logic_vector(DataVal);
-      put <= '1';
-      FifoSB.Push(std_logic_vector(DataVal));
-      
-      -- Sample coverage
-      OpCov.ICover(1);  -- Put only
-      if full = '1' then
-        StateCov.ICover((1, to_integer(unsigned'('0' & valid))));
+    -- First, get initial status
+    GetFifoStatus(TxRec, FifoStatus);
+    TransCov.ICover(1);  -- Empty_to_Filling
+    
+    -- Fill with sequential data using individual Send transactions
+    for i in 0 to MIN_DEPTH-1 loop
+      -- Try to send, checking full status
+      TrySend(TxRec, std_logic_vector(to_unsigned(i, D_BITS)), SendOk);
+      if SendOk then
+        WriteCount := WriteCount + 1;
+        OpCov.ICover(5);  -- TrySend
+        FillCov.ICover(WriteCount);
       else
-        StateCov.ICover((0, to_integer(unsigned'('0' & valid))));
+        -- FIFO is full, use blocking Send
+        Send(TxRec, i, D_BITS);
+        WriteCount := WriteCount + 1;
+        OpCov.ICover(1);  -- Send
       end if;
-      EstateCov.ICover(to_integer(unsigned(estate_wr)));
-      
-      wait until rising_edge(Clock);
-      DataVal := DataVal + 1;
     end loop;
     
-    put <= '0';
-    din <= (others => '-');
+    GetFifoStatus(TxRec, FifoStatus);
+    AffirmIf(ProcID, FifoStatus.Full = '1', "FIFO should be full after fill");
+    TransCov.ICover(2);  -- Filling_to_Full
+    Log(ProcID, "Phase 1: Filled " & integer'image(WriteCount) & " words", INFO);
     
-    -- Verify full flag is asserted
-    AffirmIf(ProcID, full = '1', "FIFO should be full after fill");
-    Log(ProcID, "FIFO filled with " & integer'image(to_integer(DataVal)) & " words", INFO);
+    -- Wait for reader to drain Phase 1
+    WaitForBarrier(Phase1Done);
 
     ---------------------------------------------------------------------------
-    -- Test Phase 2: Wait for drain, then refill with random delays
+    -- Phase 2: Burst writes using SendBurst (128 words)
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 2: Random write patterns", INFO);
-    -- Wait for FIFO to drain completely
-    wait until valid = '0';
+    Log(ProcID, "Phase 2: Burst writes via SendBurst()", INFO);
     
-    for i in 0 to 63 loop
-      -- Random delay before write
-      for d in 1 to RandGen.RandInt(0, 3) loop
-        wait until rising_edge(Clock);
-        OpCov.ICover(0);  -- Idle
-      end loop;
-      
-      -- Write data
-      din <= std_logic_vector(DataVal);
-      put <= '1';
-      FifoSB.Push(std_logic_vector(DataVal));
-      OpCov.ICover(1);  -- Put only
-      EstateCov.ICover(to_integer(unsigned(estate_wr)));
-      
-      wait until rising_edge(Clock) and full = '0';
-      DataVal := DataVal + 1;
-    end loop;
+    -- Fill TxBurstFifo with incremental data
+    PushBurstIncrement(TxBurstFifo, WriteCount, 128, D_BITS);
     
-    put <= '0';
-    din <= (others => '-');
+    -- Send burst
+    SendBurst(TxRec, 128);
+    WriteCount := WriteCount + 128;
+    OpCov.ICover(3);  -- SendBurst
+    
+    Log(ProcID, "Phase 2: Wrote 128 burst words", INFO);
+    
+    -- Wait for reader to complete Phase 2
+    WaitForBarrier(Phase2Done);
 
     ---------------------------------------------------------------------------
-    -- Test Phase 3: Burst writes
+    -- Phase 3: Random burst writes with multiple small bursts
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 3: Burst write test", INFO);
-    -- Wait for FIFO to drain completely
-    wait until valid = '0';
+    Log(ProcID, "Phase 3: Multiple random bursts via SendBurst()", INFO);
     
     for burst in 0 to 3 loop
-      -- Burst of writes
-      for i in 0 to 7 loop
-        din <= std_logic_vector(DataVal);
-        put <= '1';
-        FifoSB.Push(std_logic_vector(DataVal));
-        OpCov.ICover(1);
-        wait until rising_edge(Clock) and full = '0';
-        DataVal := DataVal + 1;
-      end loop;
+      -- Fill with random data
+      PushBurstRandom(TxBurstFifo, WriteCount + burst*16, 16, D_BITS);
       
-      -- Gap between bursts
-      put <= '0';
-      for d in 1 to 10 loop
-        wait until rising_edge(Clock);
-        OpCov.ICover(0);
-      end loop;
+      -- Send burst of 16 words
+      SendBurst(TxRec, 16);
+      WriteCount := WriteCount + 16;
+      OpCov.ICover(3);  -- SendBurst
+      
+      -- Small gap between bursts
+      WaitForClock(TxRec, 5);
+    end loop;
+    
+    Log(ProcID, "Phase 3: Wrote 64 random burst words", INFO);
+    
+    -- Wait for reader to complete Phase 3
+    WaitForBarrier(Phase3Done);
+
+    ---------------------------------------------------------------------------
+    -- Phase 4: Mixed operations stress test
+    ---------------------------------------------------------------------------
+    Log(ProcID, "Phase 4: Mixed operations stress test", INFO);
+    
+    -- Mix of single sends and small bursts
+    for i in 0 to 24 loop
+      if (i mod 3) = 0 then
+        -- Single send
+        Send(TxRec, WriteCount, D_BITS);
+        WriteCount := WriteCount + 1;
+        OpCov.ICover(1);  -- Send
+      else
+        -- Small burst of 4 words
+        PushBurstIncrement(TxBurstFifo, WriteCount, 4, D_BITS);
+        SendBurst(TxRec, 4);
+        WriteCount := WriteCount + 4;
+        OpCov.ICover(3);  -- SendBurst
+      end if;
     end loop;
 
-    put <= '0';
-    din <= (others => '-');
-    WriterDone <= '1';
+    Log(ProcID, "Total writes: " & integer'image(WriteCount), INFO);
     
+    WaitForBarrier(Phase4Done);
     WaitForBarrier(TestDone);
     wait;
   end process;
 
   ----------------------------------------------------------------------------
-  -- Reader Process - reads data and verifies against scoreboard
+  -- Reader Process - uses Transaction interface to verify data
   ----------------------------------------------------------------------------
   ReaderProc : process
     constant ProcID   : AlertLogIDType := NewID("ReaderProc", TCID);
-    variable Expected : tDataWord;
-    variable RandGen  : RandomPType;
-    variable ReadData : tDataWord;
+    variable ReadCount  : integer := 0;
+    variable ReadData   : std_logic_vector(D_BITS-1 downto 0);
+    variable FifoStatus : FifoStatusType;
+    variable CheckOk    : boolean;
   begin
-    got <= '0';
-    wait until Reset = '0';
+    wait until nReset = '1';
+    WaitForClock(RxRec, 2);
 
-    RandGen.InitSeed(tConfigIndex'pos(CONFIG_INDEX) + 456);
+    -- Assign BurstFifo to transaction record
+    RxRec.BurstFifo <= RxBurstFifo;
 
-    -- Keep reading until writer is done and scoreboard is empty
-    ReadLoop: while (WriterDone = '0') or (valid = '1') loop
+    ---------------------------------------------------------------------------
+    -- Phase 1: Drain FIFO using Check()
+    ---------------------------------------------------------------------------
+    Log(ProcID, "Phase 1: Drain FIFO via Check()", INFO);
+    
+    -- Drain sequential data using individual Check transactions
+    for i in 0 to MIN_DEPTH-1 loop
+      Check(RxRec, i, D_BITS);
+      ReadCount := ReadCount + 1;
+      OpCov.ICover(2);  -- Check
       
-      -- Wait for valid data
-      if valid = '0' then
-        wait until rising_edge(Clock) and valid = '1';
-      end if;
+      -- Sample coverage
+      GetFifoStatus(RxRec, FifoStatus);
+      StateCov.ICover((to_integer(unsigned'('0' & FifoStatus.Full)), 
+                       to_integer(unsigned'('0' & FifoStatus.Valid))));
+    end loop;
+    
+    TransCov.ICover(4);  -- Draining_to_Empty
+    Log(ProcID, "Phase 1: Read " & integer'image(ReadCount) & " words", INFO);
+    
+    WaitForBarrier(Phase1Done);
+
+    ---------------------------------------------------------------------------
+    -- Phase 2: Verify burst data using CheckBurst
+    ---------------------------------------------------------------------------
+    Log(ProcID, "Phase 2: Verify burst data via CheckBurst()", INFO);
+    
+    -- Prepare expected values
+    PushBurstIncrement(RxBurstFifo, ReadCount, 128, D_BITS);
+    
+    -- Check burst
+    CheckBurst(RxRec, 128);
+    ReadCount := ReadCount + 128;
+    OpCov.ICover(4);  -- CheckBurst
+    
+    Log(ProcID, "Phase 2: Verified 128 words", INFO);
+    
+    WaitForBarrier(Phase2Done);
+
+    ---------------------------------------------------------------------------
+    -- Phase 3: Verify random burst data
+    ---------------------------------------------------------------------------
+    Log(ProcID, "Phase 3: Verify random bursts via CheckBurst()", INFO);
+    
+    for burst in 0 to 3 loop
+      -- Same seed pattern as writer
+      PushBurstRandom(RxBurstFifo, ReadCount + burst*16, 16, D_BITS);
       
-      -- Sample state coverage
-      if full = '1' then
-        StateCov.ICover((1, 1));
+      -- Check burst
+      CheckBurst(RxRec, 16);
+      ReadCount := ReadCount + 16;
+      OpCov.ICover(4);  -- CheckBurst
+    end loop;
+    
+    Log(ProcID, "Phase 3: Verified 64 words", INFO);
+    
+    WaitForBarrier(Phase3Done);
+
+    ---------------------------------------------------------------------------
+    -- Phase 4: Verify mixed operations
+    ---------------------------------------------------------------------------
+    Log(ProcID, "Phase 4: Verify mixed operations", INFO);
+    
+    for i in 0 to 24 loop
+      if (i mod 3) = 0 then
+        -- Single check
+        Check(RxRec, ReadCount, D_BITS);
+        ReadCount := ReadCount + 1;
+        OpCov.ICover(2);  -- Check
       else
-        StateCov.ICover((0, 1));
+        -- Small burst of 4 words
+        PushBurstIncrement(RxBurstFifo, ReadCount, 4, D_BITS);
+        CheckBurst(RxRec, 4);
+        ReadCount := ReadCount + 4;
+        OpCov.ICover(4);  -- CheckBurst
       end if;
-      FstateCov.ICover(to_integer(unsigned(fstate_rd)));
-      
-      -- Capture data BEFORE asserting got (data is valid now)
-      ReadData := dout;
-      
-      -- Get expected value from scoreboard and verify
-      if not FifoSB.Empty then
-        Expected := FifoSB.Pop;
-        
-        AffirmIf(ProcID,
-          ReadData = Expected,
-          "Data mismatch: Got 0x" & to_hstring(ReadData) &
-          ", Expected 0x" & to_hstring(Expected) &
-          " [" & ConfigToString(CONFIG_INDEX) & "]"
-        );
-      end if;
-      
-      -- Assert got to acknowledge data and advance FIFO
-      got <= '1';
-      OpCov.ICover(2);  -- Got only
-      wait until rising_edge(Clock);
-      got <= '0';
-      
-      -- Random delay between reads  
-      for d in 1 to RandGen.RandInt(0, 2) loop
-        wait until rising_edge(Clock);
-      end loop;
-      
-    end loop ReadLoop;
+    end loop;
 
-    -- Verify scoreboard is empty
-    AffirmIf(ProcID, FifoSB.Empty, "Scoreboard should be empty at end of test");
-
+    Log(ProcID, "Total reads verified: " & integer'image(ReadCount), INFO);
+    
+    WaitForBarrier(Phase4Done);
     WaitForBarrier(TestDone);
     wait;
   end process;

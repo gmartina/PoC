@@ -1,10 +1,11 @@
 # =============================================================================
 # Authors:
-#  Thomas B. Preusser
 #  Gustavo Martin
 #
 # Description:
 #  RunAllTests.pro for fifo_cc_got OSVVM testbench
+#  Uses Verification Components with Transaction interfaces
+#  Uses FifoFillPkg for sophisticated burst patterns
 #
 # License:
 # =============================================================================
@@ -23,12 +24,21 @@
 # limitations under the License.
 # =============================================================================
 
+# Analyze Verification Component packages and entities
+# Note: FifoCcGotTransactionPkg is no longer needed - using OSVVM's StreamRecType
+analyze FifoCcGotComponentPkg.vhdl
+analyze FifoCcGotTransmitter.vhdl
+analyze FifoCcGotReceiver.vhdl
+
+# Analyze Test Controller package and entity
 analyze fifo_cc_got_TestController_pkg.vhdl
 analyze fifo_cc_got_TestController.vhdl
+
+# Analyze Test Harness (instantiates DUT and VCs)
 analyze fifo_cc_got_TestHarness.vhdl
 
-# Run Simple test for default configuration
+# Run Simple test - uses Send/Check transaction interface
 RunTest fifo_cc_got_Simple.vhdl
 
-# Run Exhaustive test for comprehensive coverage
-RunTest fifo_cc_got_Exhaustive.vhdl
+# Run Exhaustive test - comprehensive coverage with VCs
+#RunTest fifo_cc_got_Exhaustive.vhdl

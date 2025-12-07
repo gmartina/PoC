@@ -2,14 +2,14 @@
 -- vim: tabstop=2:shiftwidth=2:noexpandtab
 -- kate: tab-width 2; replace-tabs off; indent-width 2;
 -- =============================================================================
--- Authors:					Thomas B. Preusser
---                  Gustavo Martin
+-- Authors:         Gustavo Martin
 --
--- Entity:					fifo_cc_got_TestController
+-- Entity:          fifo_cc_got_TestController
 --
 -- Description:
 -- -------------------------------------
 -- Test controller entity for fifo_cc_got OSVVM testbench
+-- Uses Transaction interfaces to communicate with VCs
 --
 -- License:
 -- =============================================================================
@@ -19,7 +19,7 @@
 -- you may not use this file except in compliance with the License.
 -- You may obtain a copy of the License at
 --
---		http://www.apache.org/licenses/LICENSE-2.0
+--    http://www.apache.org/licenses/LICENSE-2.0
 --
 -- Unless required by applicable law or agreed to in writing, software
 -- distributed under the License is distributed on an "AS IS" BASIS,
@@ -34,6 +34,10 @@ use     IEEE.numeric_std.all;
 
 library osvvm;
 context osvvm.OsvvmContext;
+use     osvvm.ScoreboardPkg_slv.all;
+
+library osvvm_common;
+context osvvm_common.OsvvmCommonContext;
 
 use     work.fifo_cc_got_TestController_pkg.all;
 
@@ -42,19 +46,17 @@ entity fifo_cc_got_TestController is
     CONFIG_INDEX : tConfigIndex := 0
   );
   port (
-    Clock     : in  std_logic;
-    Reset     : in  std_logic;
+    -- Clock and Reset
+    Clock   : in    std_logic;
+    nReset  : in    std_logic;
     
-    -- Write interface control
-    put       : out std_logic;
-    din       : out tDataWord;
-    full      : in  std_logic;
-    estate_wr : in  std_logic_vector(ESTATE_WR_BITS-1 downto 0);
-    
-    -- Read interface control
-    got       : out std_logic;
-    dout      : in  tDataWord;
-    valid     : in  std_logic;
-    fstate_rd : in  std_logic_vector(FSTATE_RD_BITS-1 downto 0)
+    -- Transaction interfaces to VCs (OSVVM Standard)
+    TxRec   : inOut StreamRecType;  -- To Transmitter VC
+    RxRec   : inOut StreamRecType   -- To Receiver VC
   );
+
+  -- Simplifying access to Burst FIFOs using aliases (OSVVM pattern)
+  alias TxBurstFifo : ScoreboardIdType is TxRec.BurstFifo;
+  alias RxBurstFifo : ScoreboardIdType is RxRec.BurstFifo;
+
 end entity;
