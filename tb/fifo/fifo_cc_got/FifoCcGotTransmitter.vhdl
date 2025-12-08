@@ -132,7 +132,6 @@ begin
           put <= '1';
           WaitForClock(Clk);
           put <= '0';
-          WaitForClock(Clk);  -- Extra cycle for FIFO stability
           
           TransactionCount <= TransactionCount + 1;
           Log(ModelID, "SEND: 0x" & to_hstring(LocalData), DEBUG);
@@ -148,7 +147,6 @@ begin
             put <= '1';
             WaitForClock(Clk);
             put <= '0';
-            WaitForClock(Clk);
             TransactionCount <= TransactionCount + 1;
             Log(ModelID, "SEND_ASYNC: 0x" & to_hstring(LocalData), DEBUG);
           else
@@ -163,20 +161,23 @@ begin
           Log(ModelID, "SEND_BURST: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
+            -- Wait if FIFO is full before popping data
+            if full = '1' then
+              WaitForLevel(full, '0');
+            end if;
+            
             LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
             
-            -- Wait if FIFO is full
-            WaitForLevel(full, '0');
-            WaitForClock(Clk);
-            
+            -- Write data
             din <= LocalData;
             put <= '1';
-            WaitForClock(Clk);
-            put <= '0';
             WaitForClock(Clk);
             
             TransactionCount <= TransactionCount + 1;
           end loop;
+          
+          -- Deassert put after burst completes
+          put <= '0';
         
         ---------------------------------------------------------
         -- SEND_BURST_ASYNC - Non-blocking burst
@@ -186,22 +187,24 @@ begin
           Log(ModelID, "SEND_BURST_ASYNC: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
-            
-            if full = '0' then
-              din <= LocalData;
-              put <= '1';
-              WaitForClock(Clk);
+            -- Check full BEFORE popping to avoid losing data
+            if full = '1' then
+              -- Deassert put before exiting
               put <= '0';
-              WaitForClock(Clk);
-              TransactionCount <= TransactionCount + 1;
-            else
-              -- Push back data if full
-              Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataToModel'length));
               Alert(ModelID, "SEND_BURST_ASYNC: FIFO full at word " & integer'image(i), WARNING);
               exit;
             end if;
+            
+            LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
+            
+            din <= LocalData;
+            put <= '1';
+            WaitForClock(Clk);
+            TransactionCount <= TransactionCount + 1;
           end loop;
+          
+          -- Deassert put after burst completes (also handles normal completion)
+          put <= '0';
         
         ---------------------------------------------------------
         -- WAIT_FOR_CLOCK

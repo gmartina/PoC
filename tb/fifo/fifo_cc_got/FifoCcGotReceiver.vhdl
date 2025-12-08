@@ -128,15 +128,18 @@ begin
         ---------------------------------------------------------
         when GET =>
           -- Wait for valid data
-          WaitForLevel(valid, '1');
-          WaitForClock(Clk);
+          if valid = '0' then
+            WaitForLevel(valid, '1');
+          end if;
           
-          -- Capture data BEFORE asserting got (critical for "got" protocol)
-          LocalData := dout;
-          
-          -- Acknowledge read
+          -- Acknowledge read (handshake)
           got <= '1';
           WaitForClock(Clk);
+          
+          -- Capture data during handshake (when both valid and got are high)
+          LocalData := dout;
+          
+          -- Deassert got
           got <= '0';
           
           TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
@@ -148,11 +151,13 @@ begin
         ---------------------------------------------------------
         when TRY_GET =>
           if valid = '1' then
-            -- Capture data BEFORE asserting got
-            LocalData := dout;
-            
+            -- Acknowledge read (handshake)
             got <= '1';
             WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
             got <= '0';
             
             TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
@@ -171,15 +176,17 @@ begin
           ExpectedData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
           -- Wait for valid data
-          WaitForLevel(valid, '1');
-          WaitForClock(Clk);
+          if valid = '0' then
+            WaitForLevel(valid, '1');
+          end if;
           
-          -- Capture data BEFORE asserting got
-          LocalData := dout;
-          
-          -- Acknowledge read
+          -- Acknowledge read (handshake)
           got <= '1';
           WaitForClock(Clk);
+          
+          -- Capture data during handshake
+          LocalData := dout;
+          
           got <= '0';
           
           TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
@@ -198,11 +205,13 @@ begin
           ExpectedData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
           if valid = '1' then
-            -- Capture data BEFORE asserting got
-            LocalData := dout;
-            
+            -- Acknowledge read (handshake)
             got <= '1';
             WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
             got <= '0';
             
             TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
@@ -226,18 +235,18 @@ begin
           
           for i in 1 to NumWords loop
             -- Wait for valid data
-            WaitForLevel(valid, '1');
-            WaitForClock(Clk);
+            if valid = '0' then
+              WaitForLevel(valid, '1');
+            end if;
             
-            -- Capture data BEFORE asserting got
-            LocalData := dout;
-            
-            -- Acknowledge read
+            -- Acknowledge read (handshake)
             got <= '1';
             WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
             got <= '0';
-            -- Wait one more cycle for FIFO to update dout
-            WaitForClock(Clk);
             
             -- Push to burst FIFO
             Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
@@ -254,22 +263,22 @@ begin
           Log(ModelID, "TRY_GET_BURST: " & integer'image(NumWords) & " words requested", INFO);
           
           for i in 1 to NumWords loop
-            if valid = '1' then
-              -- Capture data BEFORE asserting got
-              LocalData := dout;
-              
-              got <= '1';
-              WaitForClock(Clk);
-              got <= '0';
-              -- Wait one more cycle for FIFO to update dout
-              WaitForClock(Clk);
-              
-              Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
-              TransactionCount <= TransactionCount + 1;
-              TransRec.IntFromModel <= i;
-            else
+            if valid = '0' then
               exit;
             end if;
+            
+            -- Acknowledge read (handshake)
+            got <= '1';
+            WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
+            got <= '0';
+            
+            Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
+            TransactionCount <= TransactionCount + 1;
+            TransRec.IntFromModel <= i;
           end loop;
         
         ---------------------------------------------------------
@@ -281,26 +290,21 @@ begin
           
           for i in 1 to NumWords loop
             -- Wait for valid data
-            WaitForLevel(valid, '1');
-            WaitForClock(Clk);
+            if valid = '0' then
+              WaitForLevel(valid, '1');
+            end if;
             
-            -- Capture data BEFORE asserting got
-            LocalData := dout;
-            
-            -- Get expected from burst FIFO and verify
-            ExpectedData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
-            
-            AffirmIf(ModelID,
-              LocalData = ExpectedData,
-              "CHECK_BURST[" & integer'image(i) & "]: Got 0x" & to_hstring(LocalData) & 
-              ", Expected 0x" & to_hstring(ExpectedData));
-            
-            -- Acknowledge read AFTER verification
+            -- Acknowledge read (handshake)
             got <= '1';
             WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
             got <= '0';
-            -- Wait one more cycle for FIFO to update dout with next data
-            WaitForClock(Clk);
+            
+            -- Use OSVVM Check with BurstFifo scoreboard
+            Check(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
             
             TransactionCount <= TransactionCount + 1;
           end loop;
@@ -314,28 +318,24 @@ begin
           Log(ModelID, "TRY_CHECK_BURST: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            if valid = '1' then
-              LocalData := dout;
-              
-              got <= '1';
-              WaitForClock(Clk);
-              got <= '0';
-              
-              ExpectedData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
-              
-              AffirmIf(ModelID,
-                LocalData = ExpectedData,
-                "TRY_CHECK_BURST[" & integer'image(i) & "]: Got 0x" & to_hstring(LocalData) & 
-                ", Expected 0x" & to_hstring(ExpectedData));
-              
-              -- Wait one more cycle for FIFO to update dout
-              WaitForClock(Clk);
-              
-              TransactionCount <= TransactionCount + 1;
-              TransRec.IntFromModel <= i;
-            else
+            if valid = '0' then
               exit;
             end if;
+            
+            -- Acknowledge read (handshake)
+            got <= '1';
+            WaitForClock(Clk);
+            
+            -- Capture data during handshake
+            LocalData := dout;
+            
+            got <= '0';
+            
+            -- Use OSVVM Check with BurstFifo scoreboard
+            Check(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
+            
+            TransactionCount <= TransactionCount + 1;
+            TransRec.IntFromModel <= i;
           end loop;
         
         ---------------------------------------------------------

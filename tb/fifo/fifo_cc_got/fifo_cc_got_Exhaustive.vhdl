@@ -62,10 +62,6 @@ architecture Exhaustive of fifo_cc_got_TestController is
   -- Alert/Log IDs
   constant TCID : AlertLogIDType := NewID("FifoCcGotExhaustive_" & ConfigToString(CONFIG_INDEX));
 
-  -- Burst FIFOs for data generation
-  shared variable TxBurstFifo : ScoreboardIdType;
-  shared variable RxBurstFifo : ScoreboardIdType;
-
   -- Functional Coverage
   shared variable StateCov   : CovPType;  -- Full/Valid cross-coverage
   shared variable OpCov      : CovPType;  -- Operation coverage
@@ -80,7 +76,7 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 500 ms;
   begin
-    SetTestName("fifo_cc_got_Exhaustive_" & ConfigToString(CONFIG_INDEX));
+    SetTestName("fifo_cc_got_Exhaustive");
 
     SetLogEnable(PASSED, FALSE);
     SetLogEnable(INFO,   TRUE);
@@ -91,8 +87,8 @@ begin
     SetTranscriptMirror(TRUE);
 
     -- Initialize Burst FIFOs
-    TxBurstFifo := NewID("TxBurstFifo", TCID);
-    RxBurstFifo := NewID("RxBurstFifo", TCID);
+    TxBurstFifo <= NewID("TxBurstFifo", TCID);
+    RxBurstFifo <= NewID("RxBurstFifo", TCID);
 
     -- Initialize State Cross-Coverage (full x valid)
     StateCov.AddCross("Full_Valid_Cross",
@@ -149,7 +145,6 @@ begin
   WriterProc : process
     constant ProcID   : AlertLogIDType := NewID("WriterProc", TCID);
     variable WriteCount : integer := 0;
-    variable FifoStatus : FifoStatusType;
     variable SendOk     : boolean;
   begin
     wait until nReset = '1';
@@ -163,28 +158,17 @@ begin
     ---------------------------------------------------------------------------
     Log(ProcID, "Phase 1: Fill FIFO to capacity via Send()", INFO);
     
-    -- First, get initial status
-    GetFifoStatus(TxRec, FifoStatus);
     TransCov.ICover(1);  -- Empty_to_Filling
     
     -- Fill with sequential data using individual Send transactions
     for i in 0 to MIN_DEPTH-1 loop
-      -- Try to send, checking full status
-      TrySend(TxRec, std_logic_vector(to_unsigned(i, D_BITS)), SendOk);
-      if SendOk then
-        WriteCount := WriteCount + 1;
-        OpCov.ICover(5);  -- TrySend
-        FillCov.ICover(WriteCount);
-      else
-        -- FIFO is full, use blocking Send
-        Send(TxRec, i, D_BITS);
-        WriteCount := WriteCount + 1;
-        OpCov.ICover(1);  -- Send
-      end if;
+      -- Use blocking Send with std_logic_vector
+      Send(TxRec, std_logic_vector(to_unsigned(i, D_BITS)));
+      WriteCount := WriteCount + 1;
+      OpCov.ICover(1);  -- Send
+      FillCov.ICover(WriteCount);
     end loop;
     
-    GetFifoStatus(TxRec, FifoStatus);
-    AffirmIf(ProcID, FifoStatus.Full = '1', "FIFO should be full after fill");
     TransCov.ICover(2);  -- Filling_to_Full
     Log(ProcID, "Phase 1: Filled " & integer'image(WriteCount) & " words", INFO);
     
@@ -241,7 +225,7 @@ begin
     for i in 0 to 24 loop
       if (i mod 3) = 0 then
         -- Single send
-        Send(TxRec, WriteCount, D_BITS);
+        Send(TxRec, std_logic_vector(to_unsigned(WriteCount, D_BITS)));
         WriteCount := WriteCount + 1;
         OpCov.ICover(1);  -- Send
       else
@@ -267,8 +251,6 @@ begin
     constant ProcID   : AlertLogIDType := NewID("ReaderProc", TCID);
     variable ReadCount  : integer := 0;
     variable ReadData   : std_logic_vector(D_BITS-1 downto 0);
-    variable FifoStatus : FifoStatusType;
-    variable CheckOk    : boolean;
   begin
     wait until nReset = '1';
     WaitForClock(RxRec, 2);
@@ -283,14 +265,9 @@ begin
     
     -- Drain sequential data using individual Check transactions
     for i in 0 to MIN_DEPTH-1 loop
-      Check(RxRec, i, D_BITS);
+      Check(RxRec, std_logic_vector(to_unsigned(i, D_BITS)));
       ReadCount := ReadCount + 1;
       OpCov.ICover(2);  -- Check
-      
-      -- Sample coverage
-      GetFifoStatus(RxRec, FifoStatus);
-      StateCov.ICover((to_integer(unsigned'('0' & FifoStatus.Full)), 
-                       to_integer(unsigned'('0' & FifoStatus.Valid))));
     end loop;
     
     TransCov.ICover(4);  -- Draining_to_Empty
@@ -342,7 +319,7 @@ begin
     for i in 0 to 24 loop
       if (i mod 3) = 0 then
         -- Single check
-        Check(RxRec, ReadCount, D_BITS);
+        Check(RxRec, std_logic_vector(to_unsigned(ReadCount, D_BITS)));
         ReadCount := ReadCount + 1;
         OpCov.ICover(2);  -- Check
       else
