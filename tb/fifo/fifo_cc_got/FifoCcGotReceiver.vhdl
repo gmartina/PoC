@@ -104,7 +104,7 @@ begin
     variable Available     : boolean;
   begin
     -- Initialize outputs
-    got <= '0' after tpd_Clk_got;
+    got <= '0';
     
     -- Wait for model ID initialization
     wait for 0 ns;
@@ -128,17 +128,16 @@ begin
         ---------------------------------------------------------
         when GET =>
           -- Wait for valid data
-          while valid = '0' loop
-            wait until rising_edge(Clk);
-          end loop;
+          WaitForLevel(valid, '1');
+          WaitForClock(Clk);
           
           -- Capture data BEFORE asserting got (critical for "got" protocol)
           LocalData := dout;
           
           -- Acknowledge read
-          got <= '1' after tpd_Clk_got;
-          wait until rising_edge(Clk);
-          got <= '0' after tpd_Clk_got;
+          got <= '1';
+          WaitForClock(Clk);
+          got <= '0';
           
           TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
           TransactionCount <= TransactionCount + 1;
@@ -152,9 +151,9 @@ begin
             -- Capture data BEFORE asserting got
             LocalData := dout;
             
-            got <= '1' after tpd_Clk_got;
-            wait until rising_edge(Clk);
-            got <= '0' after tpd_Clk_got;
+            got <= '1';
+            WaitForClock(Clk);
+            got <= '0';
             
             TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
             TransRec.BoolFromModel <= true;
@@ -172,17 +171,16 @@ begin
           ExpectedData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
           -- Wait for valid data
-          while valid = '0' loop
-            wait until rising_edge(Clk);
-          end loop;
+          WaitForLevel(valid, '1');
+          WaitForClock(Clk);
           
           -- Capture data BEFORE asserting got
           LocalData := dout;
           
           -- Acknowledge read
-          got <= '1' after tpd_Clk_got;
-          wait until rising_edge(Clk);
-          got <= '0' after tpd_Clk_got;
+          got <= '1';
+          WaitForClock(Clk);
+          got <= '0';
           
           TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
           TransactionCount <= TransactionCount + 1;
@@ -203,9 +201,9 @@ begin
             -- Capture data BEFORE asserting got
             LocalData := dout;
             
-            got <= '1' after tpd_Clk_got;
-            wait until rising_edge(Clk);
-            got <= '0' after tpd_Clk_got;
+            got <= '1';
+            WaitForClock(Clk);
+            got <= '0';
             
             TransRec.DataFromModel <= SafeResize(LocalData, TransRec.DataFromModel'length);
             TransRec.BoolFromModel <= true;
@@ -228,19 +226,18 @@ begin
           
           for i in 1 to NumWords loop
             -- Wait for valid data
-            while valid = '0' loop
-              wait until rising_edge(Clk);
-            end loop;
+            WaitForLevel(valid, '1');
+            WaitForClock(Clk);
             
             -- Capture data BEFORE asserting got
             LocalData := dout;
             
             -- Acknowledge read
-            got <= '1' after tpd_Clk_got;
-            wait until rising_edge(Clk);
-            got <= '0' after tpd_Clk_got;
+            got <= '1';
+            WaitForClock(Clk);
+            got <= '0';
             -- Wait one more cycle for FIFO to update dout
-            wait until rising_edge(Clk);
+            WaitForClock(Clk);
             
             -- Push to burst FIFO
             Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
@@ -261,11 +258,11 @@ begin
               -- Capture data BEFORE asserting got
               LocalData := dout;
               
-              got <= '1' after tpd_Clk_got;
-              wait until rising_edge(Clk);
-              got <= '0' after tpd_Clk_got;
+              got <= '1';
+              WaitForClock(Clk);
+              got <= '0';
               -- Wait one more cycle for FIFO to update dout
-              wait until rising_edge(Clk);
+              WaitForClock(Clk);
               
               Push(TransRec.BurstFifo, SafeResize(LocalData, TransRec.DataFromModel'length));
               TransactionCount <= TransactionCount + 1;
@@ -284,9 +281,8 @@ begin
           
           for i in 1 to NumWords loop
             -- Wait for valid data
-            while valid = '0' loop
-              wait until rising_edge(Clk);
-            end loop;
+            WaitForLevel(valid, '1');
+            WaitForClock(Clk);
             
             -- Capture data BEFORE asserting got
             LocalData := dout;
@@ -300,11 +296,11 @@ begin
               ", Expected 0x" & to_hstring(ExpectedData));
             
             -- Acknowledge read AFTER verification
-            got <= '1' after tpd_Clk_got;
-            wait until rising_edge(Clk);
-            got <= '0' after tpd_Clk_got;
+            got <= '1';
+            WaitForClock(Clk);
+            got <= '0';
             -- Wait one more cycle for FIFO to update dout with next data
-            wait until rising_edge(Clk);
+            WaitForClock(Clk);
             
             TransactionCount <= TransactionCount + 1;
           end loop;
@@ -321,9 +317,9 @@ begin
             if valid = '1' then
               LocalData := dout;
               
-              got <= '1' after tpd_Clk_got;
-              wait until rising_edge(Clk);
-              got <= '0' after tpd_Clk_got;
+              got <= '1';
+              WaitForClock(Clk);
+              got <= '0';
               
               ExpectedData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
               
@@ -333,7 +329,7 @@ begin
                 ", Expected 0x" & to_hstring(ExpectedData));
               
               -- Wait one more cycle for FIFO to update dout
-              wait until rising_edge(Clk);
+              WaitForClock(Clk);
               
               TransactionCount <= TransactionCount + 1;
               TransRec.IntFromModel <= i;
@@ -355,9 +351,7 @@ begin
         ---------------------------------------------------------
         when WAIT_FOR_CLOCK =>
           NumWords := TransRec.IntToModel;
-          for i in 1 to NumWords loop
-            wait until rising_edge(Clk);
-          end loop;
+          WaitForClock(Clk, NumWords);
         
         ---------------------------------------------------------
         -- GET_TRANSACTION_COUNT

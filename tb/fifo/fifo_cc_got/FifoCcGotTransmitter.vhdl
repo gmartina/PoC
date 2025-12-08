@@ -97,8 +97,8 @@ begin
     variable IntOption     : integer;
   begin
     -- Initialize outputs
-    put <= '0' after tpd_Clk_put;
-    din <= (others => '0') after tpd_Clk_din;
+    put <= '0';
+    din <= (others => '0');
     
     -- Wait for model ID initialization
     wait for 0 ns;
@@ -124,16 +124,15 @@ begin
           LocalData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
           -- Wait if FIFO is full
-          while full = '1' loop
-            wait until rising_edge(Clk);
-          end loop;
+          WaitForLevel(full, '0');
+          WaitForClock(Clk);
           
           -- Write data
-          din <= LocalData after tpd_Clk_din;
-          put <= '1' after tpd_Clk_put;
-          wait until rising_edge(Clk);
-          put <= '0' after tpd_Clk_put;
-          wait until rising_edge(Clk);  -- Extra cycle for FIFO stability
+          din <= LocalData;
+          put <= '1';
+          WaitForClock(Clk);
+          put <= '0';
+          WaitForClock(Clk);  -- Extra cycle for FIFO stability
           
           TransactionCount <= TransactionCount + 1;
           Log(ModelID, "SEND: 0x" & to_hstring(LocalData), DEBUG);
@@ -145,11 +144,11 @@ begin
           LocalData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
           if full = '0' then
-            din <= LocalData after tpd_Clk_din;
-            put <= '1' after tpd_Clk_put;
-            wait until rising_edge(Clk);
-            put <= '0' after tpd_Clk_put;
-            wait until rising_edge(Clk);
+            din <= LocalData;
+            put <= '1';
+            WaitForClock(Clk);
+            put <= '0';
+            WaitForClock(Clk);
             TransactionCount <= TransactionCount + 1;
             Log(ModelID, "SEND_ASYNC: 0x" & to_hstring(LocalData), DEBUG);
           else
@@ -167,15 +166,14 @@ begin
             LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
             
             -- Wait if FIFO is full
-            while full = '1' loop
-              wait until rising_edge(Clk);
-            end loop;
+            WaitForLevel(full, '0');
+            WaitForClock(Clk);
             
-            din <= LocalData after tpd_Clk_din;
-            put <= '1' after tpd_Clk_put;
-            wait until rising_edge(Clk);
-            put <= '0' after tpd_Clk_put;
-            wait until rising_edge(Clk);
+            din <= LocalData;
+            put <= '1';
+            WaitForClock(Clk);
+            put <= '0';
+            WaitForClock(Clk);
             
             TransactionCount <= TransactionCount + 1;
           end loop;
@@ -191,11 +189,11 @@ begin
             LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
             
             if full = '0' then
-              din <= LocalData after tpd_Clk_din;
-              put <= '1' after tpd_Clk_put;
-              wait until rising_edge(Clk);
-              put <= '0' after tpd_Clk_put;
-              wait until rising_edge(Clk);
+              din <= LocalData;
+              put <= '1';
+              WaitForClock(Clk);
+              put <= '0';
+              WaitForClock(Clk);
               TransactionCount <= TransactionCount + 1;
             else
               -- Push back data if full
@@ -210,9 +208,7 @@ begin
         ---------------------------------------------------------
         when WAIT_FOR_CLOCK =>
           NumWords := TransRec.IntToModel;
-          for i in 1 to NumWords loop
-            wait until rising_edge(Clk);
-          end loop;
+          WaitForClock(Clk, NumWords);
         
         ---------------------------------------------------------
         -- GET_TRANSACTION_COUNT
