@@ -50,6 +50,12 @@ entity fifo_cc_got_TestController is
     Clock   : in    std_logic;
     nReset  : in    std_logic;
     
+    -- FIFO Status Signals (for direct monitoring)
+    full      : in    std_logic;  -- Write side status
+    valid     : in    std_logic;  -- Read side status
+    estate_wr : in    std_logic_vector(3 downto 0);  -- Write side fill state
+    fstate_rd : in    std_logic_vector(3 downto 0);  -- Read side fill state
+    
     -- Transaction interfaces to VCs (OSVVM Standard)
     TxRec   : inOut StreamRecType;  -- To Transmitter VC
     RxRec   : inOut StreamRecType   -- To Receiver VC

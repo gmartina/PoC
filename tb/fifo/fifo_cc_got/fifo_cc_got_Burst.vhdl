@@ -5,11 +5,11 @@
 -- Authors:         Thomas B. Preusser
 --                  Gustavo Martin
 --
--- Architecture:    fifo_cc_got_Exhaustive
+-- Architecture:    fifo_cc_got_Burst
 --
 -- Description:
 -- -------------------------------------
--- Exhaustive OSVVM test for fifo_cc_got using Verification Components
+-- Burst OSVVM test for fifo_cc_got using Verification Components
 -- Uses Transaction interface to communicate with VCs for:
 -- - Full/Empty transitions
 -- - Back-to-back operations
@@ -51,16 +51,20 @@ use     osvvm_common.FifoFillPkg_slv.all;
 
 use     work.fifo_cc_got_TestController_pkg.all;
 
-architecture Exhaustive of fifo_cc_got_TestController is
+architecture Burst of fifo_cc_got_TestController is
   -- Phase synchronization barriers
-  signal TestDone   : integer_barrier := 1;
-  signal Phase1Done : integer_barrier := 1;
-  signal Phase2Done : integer_barrier := 1;
-  signal Phase3Done : integer_barrier := 1;
-  signal Phase4Done : integer_barrier := 1;
+  signal TestDone    : integer_barrier := 1;
+  signal Phase1Fill  : integer_barrier := 1;  -- Writer fills FIFO
+  signal Phase1Done  : integer_barrier := 1;  -- Reader drains FIFO
+  signal Phase2Start : integer_barrier := 1;  -- Both ready for Phase 2
+  signal Phase2Done  : integer_barrier := 1;
+  signal Phase3Start : integer_barrier := 1;  -- Both ready for Phase 3
+  signal Phase3Done  : integer_barrier := 1;
+  signal Phase4Start : integer_barrier := 1;  -- Both ready for Phase 4
+  signal Phase4Done  : integer_barrier := 1;
 
   -- Alert/Log IDs
-  constant TCID : AlertLogIDType := NewID("FifoCcGotExhaustive_" & ConfigToString(CONFIG_INDEX));
+  constant TCID : AlertLogIDType := NewID("FifoCcGotBurst_" & ConfigToString(CONFIG_INDEX));
 
   -- Functional Coverage
   shared variable StateCov   : CovPType;  -- Full/Valid cross-coverage
@@ -76,11 +80,11 @@ begin
     constant ProcID  : AlertLogIDType := NewID("ControlProc", TCID);
     constant TIMEOUT : time := 500 ms;
   begin
-    SetTestName("fifo_cc_got_Exhaustive");
+    SetTestName("fifo_cc_got_Burst");
 
-    SetLogEnable(PASSED, FALSE);
+    SetLogEnable(PASSED, TRUE);
     SetLogEnable(INFO,   TRUE);
-    SetLogEnable(DEBUG,  FALSE);
+    SetLogEnable(DEBUG,  TRUE);
     wait for 0 ns; wait for 0 ns;
 
     TranscriptOpen;
@@ -106,10 +110,9 @@ begin
     OpCov.AddBins("TryCheck",      GenBin(6));
     OpCov.SetName("OperationCoverage");
 
-    -- Initialize Fill Level Coverage
-    for i in 0 to MIN_DEPTH/4 loop
-      FillCov.AddBins("Fill_" & integer'image(i*4) & "_to_" & integer'image(minimum((i+1)*4-1, MIN_DEPTH)),
-        GenBin(i*4, minimum((i+1)*4-1, MIN_DEPTH)));
+    -- Initialize Fill Level Coverage (4-bit state = 0-15)
+    for i in 0 to 15 loop
+      FillCov.AddBins("Fill_" & integer'image(i), GenBin(i));
     end loop;
     FillCov.SetName("FillLevelCoverage");
 
@@ -161,16 +164,27 @@ begin
     TransCov.ICover(1);  -- Empty_to_Filling
     
     -- Fill with sequential data using individual Send transactions
-    for i in 0 to MIN_DEPTH-1 loop
+    for i in 0 to MIN_DEPTH+5 loop
       -- Use blocking Send with std_logic_vector
       Send(TxRec, std_logic_vector(to_unsigned(i, D_BITS)));
       WriteCount := WriteCount + 1;
       OpCov.ICover(1);  -- Send
-      FillCov.ICover(WriteCount);
+      
+      -- Wait for full signal to update after the write
+      WaitForClock(TxRec, 1);
+      
+      -- Check if FIFO is now full
+      exit when full = '1';
     end loop;
+    
+    -- Verify FIFO reached full state
+    AffirmIf(ProcID, full = '1', "Phase 1: FIFO should be full after filling");
     
     TransCov.ICover(2);  -- Filling_to_Full
     Log(ProcID, "Phase 1: Filled " & integer'image(WriteCount) & " words", INFO);
+    -- WaitForClock(TxRec);
+    -- Signal that FIFO is full, reader can now drain
+    WaitForBarrier(Phase1Fill);
     
     -- Wait for reader to drain Phase 1
     WaitForBarrier(Phase1Done);
@@ -178,6 +192,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 2: Burst writes using SendBurst (128 words)
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 2
+    WaitForBarrier(Phase2Start);
+    
     Log(ProcID, "Phase 2: Burst writes via SendBurst()", INFO);
     
     -- Fill TxBurstFifo with incremental data
@@ -196,6 +213,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 3: Random burst writes with multiple small bursts
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 3
+    WaitForBarrier(Phase3Start);
+    
     Log(ProcID, "Phase 3: Multiple random bursts via SendBurst()", INFO);
     
     for burst in 0 to 3 loop
@@ -219,6 +239,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 4: Mixed operations stress test
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 4
+    WaitForBarrier(Phase4Start);
+    
     Log(ProcID, "Phase 4: Mixed operations stress test", INFO);
     
     -- Mix of single sends and small bursts
@@ -261,14 +284,22 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 1: Drain FIFO using Check()
     ---------------------------------------------------------------------------
+    -- Wait for writer to fill FIFO completely
+    Log(ProcID, "Phase 1: Wait for writer to fill FIFO completely", INFO);
+    WaitForBarrier(Phase1Fill);
+    
     Log(ProcID, "Phase 1: Drain FIFO via Check()", INFO);
     
-    -- Drain sequential data using individual Check transactions
-    for i in 0 to MIN_DEPTH-1 loop
-      Check(RxRec, std_logic_vector(to_unsigned(i, D_BITS)));
+    -- Drain sequential data using individual Check transactions until FIFO is empty
+    while valid = '1' loop
+      Check(RxRec, std_logic_vector(to_unsigned(ReadCount, D_BITS)));
       ReadCount := ReadCount + 1;
       OpCov.ICover(2);  -- Check
+      WaitForClock(RxRec, 1);
     end loop;
+    
+    -- Verify FIFO is empty
+    AffirmIf(ProcID, valid = '0', "Phase 1: FIFO should be empty after draining");
     
     TransCov.ICover(4);  -- Draining_to_Empty
     Log(ProcID, "Phase 1: Read " & integer'image(ReadCount) & " words", INFO);
@@ -278,6 +309,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 2: Verify burst data using CheckBurst
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 2
+    WaitForBarrier(Phase2Start);
+    
     Log(ProcID, "Phase 2: Verify burst data via CheckBurst()", INFO);
     
     -- Prepare expected values
@@ -295,6 +329,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 3: Verify random burst data
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 3
+    WaitForBarrier(Phase3Start);
+    
     Log(ProcID, "Phase 3: Verify random bursts via CheckBurst()", INFO);
     
     for burst in 0 to 3 loop
@@ -314,6 +351,9 @@ begin
     ---------------------------------------------------------------------------
     -- Phase 4: Verify mixed operations
     ---------------------------------------------------------------------------
+    -- Synchronize start of Phase 4
+    WaitForBarrier(Phase4Start);
+    
     Log(ProcID, "Phase 4: Verify mixed operations", INFO);
     
     for i in 0 to 24 loop
@@ -338,13 +378,42 @@ begin
     wait;
   end process;
 
+  ----------------------------------------------------------------------------
+  -- Monitor Process - samples FIFO fill state for coverage
+  ----------------------------------------------------------------------------
+  MonitorProc : process
+    constant ProcID : AlertLogIDType := NewID("MonitorProc", TCID);
+    variable PrevState : integer := -1;
+    variable CurrState : integer := 0;
+  begin
+    wait until nReset = '1';
+    
+    loop
+      wait until rising_edge(Clock);
+      
+      -- Sample write-side fill state
+      CurrState := to_integer(unsigned(estate_wr));
+      
+      -- Record coverage on state change
+      if CurrState /= PrevState then
+        FillCov.ICover(CurrState);
+        PrevState := CurrState;
+      end if;
+      
+      -- Exit when test completes
+      exit when TestDone > 0;
+    end loop;
+    
+    wait;
+  end process;
+
 end architecture;
 
--- Configuration for Exhaustive test
-configuration fifo_cc_got_Exhaustive of fifo_cc_got_TestHarness is
+-- Configuration for Burst test
+configuration fifo_cc_got_Burst of fifo_cc_got_TestHarness is
   for TestHarness
     for TestCtrl : fifo_cc_got_TestController
-      use entity work.fifo_cc_got_TestController(Exhaustive);
+      use entity work.fifo_cc_got_TestController(Burst);
     end for;
   end for;
 end configuration;

@@ -78,10 +78,14 @@ architecture TestHarness of fifo_cc_got_TestHarness is
       CONFIG_INDEX : tConfigIndex := 0
     );
     port (
-      Clock   : in    std_logic;
-      nReset  : in    std_logic;
-      TxRec   : inOut StreamRecType;
-      RxRec   : inOut StreamRecType
+      Clock     : in    std_logic;
+      nReset    : in    std_logic;
+      full      : in    std_logic;
+      valid     : in    std_logic;
+      estate_wr : in    std_logic_vector(3 downto 0);
+      fstate_rd : in    std_logic_vector(3 downto 0);
+      TxRec     : inOut StreamRecType;
+      RxRec     : inOut StreamRecType
     );
   end component;
 
@@ -165,10 +169,14 @@ begin
       CONFIG_INDEX => CONFIG_INDEX
     )
     port map (
-      Clock  => Clock,
-      nReset => nReset,
-      TxRec  => TxRec,
-      RxRec  => RxRec
+      Clock     => Clock,
+      nReset    => nReset,
+      full      => full,
+      valid     => valid,
+      estate_wr => estate_wr,
+      fstate_rd => fstate_rd,
+      TxRec     => TxRec,
+      RxRec     => RxRec
     );
 
 end architecture;

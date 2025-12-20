@@ -39,9 +39,9 @@ package fifo_cc_got_TestController_pkg is
 
   -- FIFO Configuration Constants
   constant D_BITS         : positive := 8;
-  constant MIN_DEPTH      : positive := 30;
-  constant ESTATE_WR_BITS : natural  := 2;
-  constant FSTATE_RD_BITS : natural  := 2;
+  constant MIN_DEPTH      : positive := 64;
+  constant ESTATE_WR_BITS : natural  := 4;
+  constant FSTATE_RD_BITS : natural  := 4;
 
   -- Test Configuration Types
   -- Boolean array for DATA_REG, STATE_REG, OUTPUT_REG combinations
