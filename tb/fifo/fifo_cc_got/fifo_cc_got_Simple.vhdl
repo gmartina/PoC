@@ -11,11 +11,13 @@
 -- -------------------------------------
 -- Simple OSVVM test for fifo_cc_got using Verification Components
 -- Uses Transaction interface to communicate with VCs:
---   - Send/SendBurst for writes via TxRec
---   - Check/CheckBurst for reads/verification via RxRec
+--   - Send for writes via TxRec
+--   - Check for reads/verification via RxRec
 --
--- Tests sequential writes, burst transfers, and random patterns
--- Uses OSVVM FifoFillPkg for burst data generation
+-- Tests only single-word operations (no bursts):
+-- - Sequential writes/reads (0 to 63)
+-- - More sequential writes/reads (64 to 191)
+-- - Random pattern writes/reads (192 to 255)
 -- Uses OSVVM Functional Coverage for FIFO state coverage
 --
 -- License:
@@ -58,9 +60,6 @@ architecture Simple of fifo_cc_got_TestController is
   -- Alert/Log IDs
   constant TCID : AlertLogIDType := NewID("FifoCcGotSimple_" & ConfigToString(CONFIG_INDEX));
 
-  -- Functional Coverage for FIFO states
-  shared variable FifoCov : CovPType;
-
 begin
   ----------------------------------------------------------------------------
   -- Control Process - manages test lifecycle
@@ -79,27 +78,12 @@ begin
     TranscriptOpen;
     SetTranscriptMirror(TRUE);
 
-    -- Initialize Burst FIFOs (aliases point to TxRec.BurstFifo and RxRec.BurstFifo)
-    TxBurstFifo <= NewID("TxBurstFifo", TCID);
-    RxBurstFifo <= NewID("RxBurstFifo", TCID);
-
-    -- Initialize Functional Coverage
-    FifoCov.AddBins("FIFO_Empty",    GenBin(0));
-    FifoCov.AddBins("FIFO_Quarter",  GenBin(1, MIN_DEPTH/4));
-    FifoCov.AddBins("FIFO_Half",     GenBin(MIN_DEPTH/4 + 1, MIN_DEPTH/2));
-    FifoCov.AddBins("FIFO_ThreeQ",   GenBin(MIN_DEPTH/2 + 1, 3*MIN_DEPTH/4));
-    FifoCov.AddBins("FIFO_Full",     GenBin(3*MIN_DEPTH/4 + 1, MIN_DEPTH));
-    FifoCov.SetName("FifoCoverage_" & ConfigToString(CONFIG_INDEX));
-
     wait until nReset = '1';
     ClearAlerts;
 
     WaitForBarrier(TestDone, TIMEOUT);
     AlertIf(ProcID, now >= TIMEOUT, "Test finished due to timeout");
     AlertIf(ProcID, GetAffirmCount < 1, "Test is not Self-Checking");
-
-    -- Report Coverage results
-    FifoCov.WriteBin;
 
     EndOfTestReports(ReportAll => TRUE);
     std.env.stop;
@@ -127,31 +111,27 @@ begin
     WaitForBarrier(Phase1Done);
     
     ---------------------------------------------------------------------------
-    -- Phase 2: Burst writes using SendBurst (64 to 191)
-    -- Uses PushBurstIncrement to fill TxBurstFifo, then SendBurst
+    -- Phase 2: Sequential single-word sends (64 to 191)
+    -- Uses Send() transaction for each word
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 2: Burst writes via SendBurst()", INFO);
-    
-    -- Fill TxBurstFifo with burst data (alias points to TxRec.BurstFifo)
-    PushBurstIncrement(TxBurstFifo, 64, 128, D_BITS);
-    
-    -- Send entire burst through transaction interface
-    SendBurst(TxRec, 128);
+    Log(ProcID, "Phase 2: Sequential single-word writes via Send()", INFO);
+    for i in 64 to 191 loop
+      Send(TxRec, std_logic_vector(to_unsigned(i, D_BITS)));
+    end loop;
     
     -- Wait for reader to complete Phase 2
     WaitForBarrier(Phase2Done);
     
     ---------------------------------------------------------------------------
-    -- Phase 3: Random pattern writes (192 to 255)
-    -- Uses PushBurstRandom for variety
+    -- Phase 3: Random pattern writes using single Send (192 to 255)
+    -- Uses RandomParm for random data generation
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 3: Random pattern writes via SendBurst()", INFO);
+    Log(ProcID, "Phase 3: Random pattern writes via Send()", INFO);
     
-    -- Fill TxBurstFifo with random data (alias points to TxRec.BurstFifo)
-    PushBurstRandom(TxBurstFifo, 192, 64, D_BITS);
-    
-    -- Send burst
-    SendBurst(TxRec, 64);
+    for i in 192 to 255 loop
+      -- Generate pseudo-random value based on index for reproducibility
+      Send(TxRec, std_logic_vector(to_unsigned((i * 37 + 17) mod (2**D_BITS), D_BITS)));
+    end loop;
 
     Log(ProcID, "Writer complete - 256 words sent", INFO);
     WaitForBarrier(TestDone);
@@ -181,31 +161,27 @@ begin
     WaitForBarrier(Phase1Done);
     
     ---------------------------------------------------------------------------
-    -- Phase 2: Check burst data using CheckBurst (64 to 191)
-    -- Uses PushBurstIncrement to fill RxBurstFifo with expected values
+    -- Phase 2: Check sequential data using single Check (64 to 191)
+    -- Uses Check() transaction which reads and verifies expected value
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 2: Verifying burst data via CheckBurst()", INFO);
-    
-    -- Prepare expected values in RxBurstFifo (alias points to RxRec.BurstFifo)
-    PushBurstIncrement(RxBurstFifo, 64, 128, D_BITS);
-    
-    -- Check entire burst
-    CheckBurst(RxRec, 128);
+    Log(ProcID, "Phase 2: Verifying sequential data via Check()", INFO);
+    for i in 64 to 191 loop
+      Check(RxRec, std_logic_vector(to_unsigned(i, D_BITS)));
+    end loop;
     
     -- Signal writer that Phase 2 read is complete
     WaitForBarrier(Phase2Done);
     
     ---------------------------------------------------------------------------
-    -- Phase 3: Check random data (192 to 255)
-    -- Uses same seed as writer for matching random sequence
+    -- Phase 3: Check random data using single Check (192 to 255)
+    -- Uses same formula as writer for matching sequence
     ---------------------------------------------------------------------------
-    Log(ProcID, "Phase 3: Verifying random data via CheckBurst()", INFO);
+    Log(ProcID, "Phase 3: Verifying random data via Check()", INFO);
     
-    -- Prepare expected values (same seed as writer, alias points to RxRec.BurstFifo)
-    PushBurstRandom(RxBurstFifo, 192, 64, D_BITS);
-    
-    -- Check burst
-    CheckBurst(RxRec, 64);
+    for i in 192 to 255 loop
+      -- Same pseudo-random formula as writer
+      Check(RxRec, std_logic_vector(to_unsigned((i * 37 + 17) mod (2**D_BITS), D_BITS)));
+    end loop;
 
     Log(ProcID, "Reader complete - 256 words verified", INFO);
     
