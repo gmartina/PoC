@@ -37,8 +37,25 @@ analyze fifo_cc_got_TestController.vhdl
 # Analyze Test Harness (instantiates DUT and VCs)
 analyze fifo_cc_got_TestHarness.vhdl
 
-# Run Simple test - uses Send/Check transaction interface
-RunTest fifo_cc_got_Simple.vhdl
-
-# Run Exhaustive test - comprehensive coverage with VCs
-#RunTest fifo_cc_got_Exhaustive.vhdl
+# Run all tests for each configuration (CONFIG_INDEX 0 to 7)
+# CONFIG_INDEX bits: [2]=OUTPUT_REG, [1]=STATE_REG, [0]=DATA_REG
+for {set config 0} {$config < 8} {incr config} {
+  TestSuite fifo_cc_got_Config_$config
+  
+  # Run Simple test
+  TestCase fifo_cc_got_Simple_Config_$config
+  RunTest fifo_cc_got_Simple.vhdl [generic CONFIG_INDEX $config]
+  
+  # Run Flags test
+  TestCase fifo_cc_got_Flags_Config_$config
+  RunTest fifo_cc_got_FullEmpty_Flags.vhdl [generic CONFIG_INDEX $config]
+  
+  # Run Burst test
+  TestCase fifo_cc_got_Burst_Config_$config
+  RunTest fifo_cc_got_Burst.vhdl [generic CONFIG_INDEX $config]
+  
+  # Run Random test
+  TestCase fifo_cc_got_Random_Config_$config
+  RunTest fifo_cc_got_Random.vhdl [generic CONFIG_INDEX $config]
+  
+}

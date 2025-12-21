@@ -127,16 +127,14 @@ begin
         -- GET - Blocking read
         ---------------------------------------------------------
         when GET =>
-          -- Wait for valid data
-          if valid = '0' then
-            WaitForLevel(valid, '1');
-          end if;
-          
-          -- Acknowledge read (handshake)
+          -- Acknowledge read (handshake) - hold until valid confirmed
           got <= '1';
-          WaitForClock(Clk);
+          loop
+            WaitForClock(Clk, 1);
+            exit when valid = '1';
+          end loop;
           
-          -- Capture data during handshake (when both valid and got are high)
+          -- Capture data when both valid and got are high
           LocalData := dout;
           
           -- Deassert got
@@ -153,10 +151,12 @@ begin
           if valid = '1' then
             -- Acknowledge read (handshake)
             got <= '1';
-            WaitForClock(Clk);
+            WaitForClock(Clk, 1);
             
-            -- Capture data during handshake
-            LocalData := dout;
+            -- Capture data if handshake confirmed
+            if valid = '1' then
+              LocalData := dout;
+            end if;
             
             got <= '0';
             
@@ -175,16 +175,14 @@ begin
         when CHECK =>
           ExpectedData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
-          -- Wait for valid data
-          if valid = '0' then
-            WaitForLevel(valid, '1');
-          end if;
-          
-          -- Acknowledge read (handshake)
+          -- Acknowledge read (handshake) - hold until valid confirmed
           got <= '1';
-          WaitForClock(Clk);
+          loop
+            WaitForClock(Clk, 1);
+            exit when valid = '1';
+          end loop;
           
-          -- Capture data during handshake
+          -- Capture data when both valid and got are high
           LocalData := dout;
           
           got <= '0';
@@ -207,10 +205,12 @@ begin
           if valid = '1' then
             -- Acknowledge read (handshake)
             got <= '1';
-            WaitForClock(Clk);
+            WaitForClock(Clk, 1);
             
-            -- Capture data during handshake
-            LocalData := dout;
+            -- Capture data if handshake confirmed
+            if valid = '1' then
+              LocalData := dout;
+            end if;
             
             got <= '0';
             
@@ -234,16 +234,14 @@ begin
           Log(ModelID, "GET_BURST: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            -- Wait for valid data
-            if valid = '0' then
-              WaitForLevel(valid, '1');
-            end if;
-            
-            -- Acknowledge read (handshake)
+            -- Acknowledge read (handshake) - hold until valid confirmed
             got <= '1';
-            WaitForClock(Clk);
+            loop
+              WaitForClock(Clk, 1);
+              exit when valid = '1';
+            end loop;
             
-            -- Capture data during handshake
+            -- Capture data when both valid and got are high
             LocalData := dout;
             
             got <= '0';
@@ -269,9 +267,13 @@ begin
             
             -- Acknowledge read (handshake)
             got <= '1';
-            WaitForClock(Clk);
+            WaitForClock(Clk, 1);
             
-            -- Capture data during handshake
+            -- Capture data if handshake confirmed
+            if valid = '0' then
+              got <= '0';
+              exit;
+            end if;
             LocalData := dout;
             
             got <= '0';
@@ -289,16 +291,14 @@ begin
           Log(ModelID, "CHECK_BURST: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            -- Wait for valid data
-            if valid = '0' then
-              WaitForLevel(valid, '1');
-            end if;
-            
-            -- Acknowledge read (handshake)
+            -- Acknowledge read (handshake) - hold until valid confirmed
             got <= '1';
-            WaitForClock(Clk);
+            loop
+              WaitForClock(Clk, 1);
+              exit when valid = '1';
+            end loop;
             
-            -- Capture data during handshake
+            -- Capture data when both valid and got are high
             LocalData := dout;
             
             got <= '0';
@@ -324,9 +324,13 @@ begin
             
             -- Acknowledge read (handshake)
             got <= '1';
-            WaitForClock(Clk);
+            WaitForClock(Clk, 1);
             
-            -- Capture data during handshake
+            -- Capture data if handshake confirmed
+            if valid = '0' then
+              got <= '0';
+              exit;
+            end if;
             LocalData := dout;
             
             got <= '0';
