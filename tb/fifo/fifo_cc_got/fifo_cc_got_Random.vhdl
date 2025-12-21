@@ -65,10 +65,6 @@ architecture Random of fifo_cc_got_TestController is
 	-- Shared Scoreboard for data checking
 	constant Scoreboard : ScoreboardIdType := NewID("DataScoreboard", TCID);
 
-	-- Burst FIFOs for actual burst operations
-	-- constant TxBurstFifo : ScoreboardIdType := NewID("TxBurstFifo", TCID);
-	-- constant RxBurstFifo : ScoreboardIdType := NewID("RxBurstFifo", TCID);
-
 	-- Functional Coverage
 	constant FillCov    : CoverageIDType := NewID("FillLevelCoverage", TCID);
 	constant OpCov      : CoverageIDType := NewID("OperationCoverage", TCID);
@@ -77,6 +73,16 @@ architecture Random of fifo_cc_got_TestController is
 	-- Test parameters
 	constant MAX_BURST   : integer := 32;    -- Maximum burst size
 	constant MAX_OPS     : integer := 1000000; -- Safety limit on operations
+
+	constant COV_SEND_ID           : integer := 1;
+	constant COV_CHECK_ID          : integer := 2;
+	constant COV_BURSTOFSINGLES_ID : integer := 3;
+	constant COV_ACTUALBURST_ID    : integer := 4;
+
+	constant COV_EMPTY_ID             : integer := 0;
+	constant COV_NOT_EMPTY_ID         : integer := 1;
+	constant COV_FULL_ID              : integer := 2;
+	constant COV_NOT_FULL_ID          : integer := 3;
 
 begin
 	----------------------------------------------------------------------------
@@ -101,22 +107,22 @@ begin
 		RxBurstFifo <= NewID("RxBurstFifo", TCID);
 
 		-- Initialize Fill Level Coverage (4-bit state = 0-15)
-		-- Require at least 20 hits per bin for thorough coverage
+		-- Require at least 20 hits per bin
 		for i in 0 to 15 loop
 			AddBins(FillCov, "Fill_" & integer'image(i), 20, GenBin(i));
 		end loop;
 
 		-- Initialize Operation Coverage
-		AddBins(OpCov, "Send",              GenBin(1));
-		AddBins(OpCov, "Check",             GenBin(2));
-		AddBins(OpCov, "BurstOfSingles",    GenBin(3));
-		AddBins(OpCov, "ActualBurst",       GenBin(4));
+		AddBins(OpCov, "Send",           20, GenBin(COV_SEND_ID));
+		AddBins(OpCov, "Check",          20, GenBin(COV_CHECK_ID));
+		AddBins(OpCov, "BurstOfSingles", 20, GenBin(COV_BURSTOFSINGLES_ID));
+		AddBins(OpCov, "ActualBurst",    20, GenBin(COV_ACTUALBURST_ID));
 
 		-- Initialize Flag Coverage (require 20+ hits for Full/Empty states)
-		AddBins(FlagCov, "Empty",       20, GenBin(0));  -- valid = '0'
-		AddBins(FlagCov, "Not_Empty",   GenBin(1));     -- valid = '1'
-		AddBins(FlagCov, "Full",        20, GenBin(2));  -- full = '1'
-		AddBins(FlagCov, "Not_Full",    GenBin(3));     -- full = '0'
+		AddBins(FlagCov, "Empty",       20, GenBin(COV_EMPTY_ID));
+		AddBins(FlagCov, "Not_Empty",   20, GenBin(COV_NOT_EMPTY_ID));
+		AddBins(FlagCov, "Full",        20, GenBin(COV_FULL_ID));
+		AddBins(FlagCov, "Not_Full",    20, GenBin(COV_NOT_FULL_ID));
 
 		wait until nReset = '1';
 		ClearAlerts;
@@ -217,7 +223,7 @@ begin
 						Send(TxRec, std_logic_vector(to_unsigned(WriteCount + i, D_BITS)));
 					end loop;
 					WriteCount := WriteCount + BurstSize;
-					ICover(OpCov, 3);  -- BurstOfSingles
+					ICover(OpCov, COV_BURSTOFSINGLES_ID);
 				else
 					-- Actual burst: use SendBurst() with TxBurstFifo
 					for i in 0 to BurstSize-1 loop
@@ -226,14 +232,14 @@ begin
 					end loop;
 					SendBurst(TxRec, BurstSize);
 					WriteCount := WriteCount + BurstSize;
-					ICover(OpCov, 4);  -- ActualBurst
+					ICover(OpCov, COV_ACTUALBURST_ID);
 				end if;
 			else
 				-- Single word operation: Push before Send
 				Push(Scoreboard, std_logic_vector(to_unsigned(WriteCount, D_BITS)));
 				Send(TxRec, std_logic_vector(to_unsigned(WriteCount, D_BITS)));
 				WriteCount := WriteCount + 1;
-				ICover(OpCov, 1);  -- Send
+				ICover(OpCov, COV_SEND_ID);
 			end if;
 		end loop;
 
@@ -320,7 +326,7 @@ begin
 						Check(Scoreboard, ReadData);
 						ReadCount := ReadCount + 1;
 					end loop;
-					ICover(OpCov, 3);  -- BurstOfSingles
+					ICover(OpCov, COV_BURSTOFSINGLES_ID);
 				else
 					-- Actual burst: use CheckBurst() with RxBurstFifo
 					-- Transfer expected data from Scoreboard to RxBurstFifo
@@ -334,7 +340,7 @@ begin
 						CheckBurst(RxRec, ActualBurstSize);
 						ReadCount := ReadCount + ActualBurstSize;
 					end if;
-					ICover(OpCov, 4);  -- ActualBurst
+					ICover(OpCov, COV_ACTUALBURST_ID);
 					ActualBurstSize := 0;
 				end if;
 			else
@@ -342,7 +348,7 @@ begin
 				Get(RxRec, ReadData);
 				Check(Scoreboard, ReadData);
 				ReadCount := ReadCount + 1;
-				ICover(OpCov, 2);  -- Check
+				ICover(OpCov, COV_CHECK_ID);
 			end if;
 		end loop;
 
@@ -379,10 +385,10 @@ begin
 			-- Sample Full flag
 			if full /= PrevFull then
 				if full = '1' then
-					ICover(FlagCov, 2);  -- Full
+					ICover(FlagCov, COV_FULL_ID);
 					Log(ProcID, "FULL detected", DEBUG);
 				else
-					ICover(FlagCov, 3);  -- Not_Full
+					ICover(FlagCov, COV_NOT_FULL_ID);
 				end if;
 				PrevFull := full;
 			end if;
@@ -390,10 +396,10 @@ begin
 			-- Sample Empty flag (via valid)
 			if valid /= PrevValid then
 				if valid = '0' then
-					ICover(FlagCov, 0);  -- Empty
+					ICover(FlagCov, COV_EMPTY_ID);
 					Log(ProcID, "EMPTY detected", DEBUG);
 				else
-					ICover(FlagCov, 1);  -- Not_Empty
+					ICover(FlagCov, COV_NOT_EMPTY_ID);
 				end if;
 				PrevValid := valid;
 			end if;

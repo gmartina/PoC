@@ -66,12 +66,6 @@ architecture Burst of fifo_cc_got_TestController is
   -- Alert/Log IDs
   constant TCID : AlertLogIDType := NewID("FifoCcGotBurst_" & ConfigToString(CONFIG_INDEX));
 
-  -- Functional Coverage
-  shared variable StateCov   : CovPType;  -- Full/Valid cross-coverage
-  shared variable OpCov      : CovPType;  -- Operation coverage
-  shared variable FillCov    : CovPType;  -- Fill level coverage
-  shared variable TransCov   : CovPType;  -- Transition coverage
-
 begin
   ----------------------------------------------------------------------------
   -- Control Process - manages test lifecycle
@@ -94,47 +88,12 @@ begin
     TxBurstFifo <= NewID("TxBurstFifo", TCID);
     RxBurstFifo <= NewID("RxBurstFifo", TCID);
 
-    -- Initialize Operation Coverage
-    OpCov.AddBins("Send",          GenBin(1));
-    OpCov.AddBins("Check",         GenBin(2));
-    OpCov.AddBins("SendBurst",     GenBin(3));
-    OpCov.AddBins("CheckBurst",    GenBin(4));
-    OpCov.SetName("OperationCoverage");
-
-    -- Initialize Fill Level Coverage (4-bit state = 0-15)
-    -- Mark bins as optional since not all states may be reached
-    for i in 0 to 15 loop
-      FillCov.AddBins("Fill_" & integer'image(i), GenBin(i));
-    end loop;
-    FillCov.SetName("FillLevelCoverage");
-    -- Set coverage goal to 70% (at least 11 of 16 states)
-    FillCov.SetCovTarget(70.0);
-
-    -- Initialize Transition Coverage
-    TransCov.AddBins("Empty_to_Filling",     GenBin(1));
-    TransCov.AddBins("Filling_to_Full",      GenBin(2));
-    TransCov.AddBins("Full_to_Draining",     GenBin(3));
-    TransCov.AddBins("Draining_to_Empty",    GenBin(4));
-    TransCov.AddBins("Steady_State",         GenBin(5));
-    TransCov.SetName("TransitionCoverage");
-
     wait until nReset = '1';
     ClearAlerts;
 
     WaitForBarrier(TestDone, TIMEOUT);
     AlertIf(ProcID, now >= TIMEOUT, "Test finished due to timeout");
     AlertIf(ProcID, GetAffirmCount < 1, "Test is not Self-Checking");
-
-    -- Check coverage goals before reporting
-    AlertIfNot(ProcID, OpCov.IsCovered, "OpCov: Coverage goals not met");
-    AlertIfNot(ProcID, FillCov.IsCovered, "FillCov: Coverage goals not met");
-    AlertIfNot(ProcID, TransCov.IsCovered, "TransCov: Coverage goals not met");
-
-    -- Report Coverage results
-    Log(ProcID, "=== Coverage Reports ===", ALWAYS);
-    OpCov.WriteBin;
-    FillCov.WriteBin;
-    TransCov.WriteBin;
 
     EndOfTestReports(ReportAll => TRUE);
     std.env.stop;
@@ -158,15 +117,12 @@ begin
     -- Phase 1: Fill FIFO to capacity using Send()
     ---------------------------------------------------------------------------
     Log(ProcID, "Phase 1: Fill FIFO to capacity via Send()", INFO);
-    
-    TransCov.ICover(1);  -- Empty_to_Filling
-    
+        
     -- Fill with sequential data using individual Send transactions
     loop
       -- Use blocking Send with std_logic_vector
       Send(TxRec, std_logic_vector(to_unsigned(WriteCount, D_BITS)));
       WriteCount := WriteCount + 1;
-      OpCov.ICover(1);  -- Send
       
       -- Wait for full signal to update after the write
       WaitForClock(TxRec, 1);
@@ -178,7 +134,6 @@ begin
     -- Verify FIFO reached full state
     AffirmIf(ProcID, full = '1', "Phase 1: FIFO should be full after filling");
     
-    TransCov.ICover(2);  -- Filling_to_Full
     Log(ProcID, "Phase 1: Filled " & integer'image(WriteCount) & " words", INFO);
     -- WaitForClock(TxRec);
     -- Signal that FIFO is full, reader can now drain
@@ -195,17 +150,13 @@ begin
     
     Log(ProcID, "Phase 2: Burst writes via SendBurst()", INFO);
     
-    -- Record steady-state transition (simultaneous read/write expected)
-    TransCov.ICover(5);  -- Steady_State
-    
     -- Fill TxBurstFifo with incremental data
     PushBurstIncrement(TxBurstFifo, WriteCount, 128, D_BITS);
     
     -- Send burst
     SendBurst(TxRec, 128);
     WriteCount := WriteCount + 128;
-    OpCov.ICover(3);  -- SendBurst
-    
+
     Log(ProcID, "Phase 2: Wrote 128 burst words", INFO);
     
     -- Wait for reader to complete Phase 2
@@ -226,8 +177,7 @@ begin
       -- Send burst of 16 words
       SendBurst(TxRec, 16);
       WriteCount := WriteCount + 16;
-      OpCov.ICover(3);  -- SendBurst
-      
+
       -- Small gap between bursts
       WaitForClock(TxRec, 5);
     end loop;
@@ -245,22 +195,17 @@ begin
     
     Log(ProcID, "Phase 4: Mixed operations stress test", INFO);
     
-    -- Record steady-state transition (simultaneous operations)
-    TransCov.ICover(5);  -- Steady_State
-    
     -- Mix of single sends and small bursts
     for i in 0 to 24 loop
       if (i mod 3) = 0 then
         -- Single send
         Send(TxRec, std_logic_vector(to_unsigned(WriteCount, D_BITS)));
         WriteCount := WriteCount + 1;
-        OpCov.ICover(1);  -- Send
       else
         -- Small burst of 4 words
         PushBurstIncrement(TxBurstFifo, WriteCount, 4, D_BITS);
         SendBurst(TxRec, 4);
         WriteCount := WriteCount + 4;
-        OpCov.ICover(3);  -- SendBurst
       end if;
     end loop;
 
@@ -294,21 +239,16 @@ begin
     
     Log(ProcID, "Phase 1: Drain FIFO via Check()", INFO);
     
-    -- Record transition from Full to Draining
-    TransCov.ICover(3);  -- Full_to_Draining
-    
     -- Drain sequential data using individual Check transactions until FIFO is empty
     while valid = '1' loop
       Check(RxRec, std_logic_vector(to_unsigned(ReadCount, D_BITS)));
       ReadCount := ReadCount + 1;
-      OpCov.ICover(2);  -- Check
       WaitForClock(RxRec, 1);
     end loop;
     
     -- Verify FIFO is empty
     AffirmIf(ProcID, valid = '0', "Phase 1: FIFO should be empty after draining");
     
-    TransCov.ICover(4);  -- Draining_to_Empty
     Log(ProcID, "Phase 1: Read " & integer'image(ReadCount) & " words", INFO);
     
     WaitForBarrier(Phase1Done);
@@ -327,8 +267,6 @@ begin
     -- Check burst
     CheckBurst(RxRec, 128);
     ReadCount := ReadCount + 128;
-    OpCov.ICover(4);  -- CheckBurst
-    
     Log(ProcID, "Phase 2: Verified 128 words", INFO);
     
     WaitForBarrier(Phase2Done);
@@ -348,7 +286,6 @@ begin
       -- Check burst
       CheckBurst(RxRec, 16);
       ReadCount := ReadCount + 16;
-      OpCov.ICover(4);  -- CheckBurst
     end loop;
     
     Log(ProcID, "Phase 3: Verified 64 words", INFO);
@@ -368,13 +305,11 @@ begin
         -- Single check
         Check(RxRec, std_logic_vector(to_unsigned(ReadCount, D_BITS)));
         ReadCount := ReadCount + 1;
-        OpCov.ICover(2);  -- Check
       else
         -- Small burst of 4 words
         PushBurstIncrement(RxBurstFifo, ReadCount, 4, D_BITS);
         CheckBurst(RxRec, 4);
         ReadCount := ReadCount + 4;
-        OpCov.ICover(4);  -- CheckBurst
       end if;
     end loop;
 
@@ -382,33 +317,6 @@ begin
     
     WaitForBarrier(Phase4Done);
     WaitForBarrier(TestDone);
-    wait;
-  end process;
-
-  ----------------------------------------------------------------------------
-  -- Monitor Process - samples FIFO fill state for coverage
-  ----------------------------------------------------------------------------
-  MonitorProc : process
-    constant ProcID : AlertLogIDType := NewID("MonitorProc", TCID);
-    variable PrevState : integer := -1;
-    variable CurrState : integer := 0;
-  begin
-    wait until nReset = '1';
-    
-    loop
-      WaitForClock(Clock);
-      
-      -- Sample write-side fill state
-      CurrState := to_integer(unsigned(estate_wr));
-      
-      -- Record coverage on state change
-      if CurrState /= PrevState then
-        FillCov.ICover(CurrState);
-        PrevState := CurrState;
-      end if;
-
-    end loop;
-    
     wait;
   end process;
 

@@ -18,7 +18,6 @@
 -- - Sequential writes/reads (0 to 63)
 -- - More sequential writes/reads (64 to 191)
 -- - Random pattern writes/reads (192 to 255)
--- Uses OSVVM Functional Coverage for FIFO state coverage
 --
 -- License:
 -- =============================================================================

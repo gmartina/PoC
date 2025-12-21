@@ -63,11 +63,6 @@ architecture FullEmpty_Flags of fifo_cc_got_TestController is
   -- Alert/Log IDs
   constant TCID : AlertLogIDType := NewID("FifoCcGotFullEmpty_" & ConfigToString(CONFIG_INDEX));
 
-  -- Functional Coverage
-  shared variable FlagCov    : CovPType;  -- Full/Empty flag coverage
-  shared variable TransCov   : CovPType;  -- Transition coverage
-  shared variable StateCov   : CovPType;  -- estate_wr/fstate_rd coverage
-
 begin
   ----------------------------------------------------------------------------
   -- Control Process - manages test lifecycle
@@ -90,43 +85,12 @@ begin
     TxBurstFifo <= NewID("TxBurstFifo", TCID);
     RxBurstFifo <= NewID("RxBurstFifo", TCID);
 
-    -- Initialize Flag Coverage (Full and Empty)
-    FlagCov.AddBins("Empty",      GenBin(0));  -- valid = '0'
-    FlagCov.AddBins("Not_Empty",  GenBin(1));  -- valid = '1'
-    FlagCov.AddBins("Full",       GenBin(2));  -- full = '1'
-    FlagCov.AddBins("Not_Full",   GenBin(3));  -- full = '0'
-    FlagCov.SetName("FlagCoverage");
-
-    -- Initialize Transition Coverage
-    TransCov.AddBins("Fill_Single_to_Full",    GenBin(1));
-    TransCov.AddBins("Drain_Single_to_Empty",  GenBin(2));
-    TransCov.AddBins("Fill_Burst_to_Full",     GenBin(3));
-    TransCov.AddBins("Drain_Burst_to_Empty",   GenBin(4));
-    TransCov.SetName("TransitionCoverage");
-
-    -- Initialize State Coverage for estate_wr and fstate_rd (4-bit = 0-15)
-    for i in 0 to 15 loop
-      StateCov.AddBins("State_" & integer'image(i), GenBin(i));
-    end loop;
-    StateCov.SetName("StateLevelCoverage");
-
     wait until nReset = '1';
     ClearAlerts;
 
     WaitForBarrier(TestDone, TIMEOUT);
     AlertIf(ProcID, now >= TIMEOUT, "Test finished due to timeout");
     AlertIf(ProcID, GetAffirmCount < 1, "Test is not Self-Checking");
-
-    -- Check coverage goals before reporting
-    AlertIfNot(ProcID, FlagCov.IsCovered, "FlagCov: Coverage goals not met");
-    AlertIfNot(ProcID, TransCov.IsCovered, "TransCov: Coverage goals not met");
-    AlertIfNot(ProcID, StateCov.IsCovered, "StateCov: Coverage goals not met");
-
-    -- Report Coverage results
-    Log(ProcID, "=== Coverage Reports ===", ALWAYS);
-    FlagCov.WriteBin;
-    TransCov.WriteBin;
-    StateCov.WriteBin;
 
     EndOfTestReports(ReportAll => TRUE);
     std.env.stop;
@@ -173,7 +137,6 @@ begin
     -- Verify estate_wr indicates full state (should be at maximum)
     AffirmIf(ProcID, estate_wr = "0000", "Phase 3: estate_wr should be max (0000) when full, got: " & to_string(estate_wr));
     AffirmIf(ProcID, fstate_rd = "1111", "Phase 3: fstate_rd should be max (1111) when full, got: " & to_string(fstate_rd));
-    TransCov.ICover(1);  -- Fill_Single_to_Full
     Log(ProcID, "Phase 1: Reached FULL after " & integer'image(WriteCount) & " single writes, estate_wr=" & to_string(estate_wr), INFO);
     
     WaitForBarrier(Phase1Done);
@@ -210,7 +173,6 @@ begin
     AffirmIf(ProcID, estate_wr = "0000", "Phase 3: estate_wr should be max (0000) when full, got: " & to_string(estate_wr));
     AffirmIf(ProcID, fstate_rd = "1111", "Phase 3: fstate_rd should be max (1111) when full, got: " & to_string(fstate_rd));
 
-    TransCov.ICover(3);  -- Fill_Burst_to_Full
     Log(ProcID, "Phase 3: Reached FULL after " & integer'image(WriteCount) & " single writes, estate_wr=" & to_string(estate_wr), INFO);
     
     WaitForBarrier(Phase3Done);
@@ -271,7 +233,6 @@ begin
     AffirmIf(ProcID, valid = '0', "Phase 2: FIFO should be EMPTY (valid = '0') after single reads");
     -- Verify fstate_rd indicates empty state (should be at minimum)
     AffirmIf(ProcID, fstate_rd = "0000", "Phase 2: fstate_rd should be min (0000) when empty, got: " & to_string(fstate_rd));
-    TransCov.ICover(2);  -- Drain_Single_to_Empty
     Log(ProcID, "Phase 2: Reached EMPTY after " & integer'image(ReadCount) & " single reads, fstate_rd=" & to_string(fstate_rd), INFO);
     
     WaitForBarrier(Phase2Done);
@@ -302,69 +263,12 @@ begin
     AffirmIf(ProcID, valid = '0', "Phase 4: FIFO should be EMPTY (valid = '0') after single reads");
     -- Verify fstate_rd indicates empty state (should be at minimum)
     AffirmIf(ProcID, fstate_rd = "0000", "Phase 4: fstate_rd should be min (0000) when empty, got: " & to_string(fstate_rd));
-    TransCov.ICover(4);  -- Drain_Burst_to_Empty
     Log(ProcID, "Phase 4: Reached EMPTY after " & integer'image(ReadCount) & " single reads, fstate_rd=" & to_string(fstate_rd), INFO);
     
     WaitForBarrier(Phase4Done);
 
     Log(ProcID, "Reader complete", INFO);
     WaitForBarrier(TestDone);
-    wait;
-  end process;
-
-  ----------------------------------------------------------------------------
-  -- Monitor Process - samples FIFO fill state for coverage
-  ----------------------------------------------------------------------------
-  MonitorProc : process
-    constant ProcID : AlertLogIDType := NewID("MonitorProc", TCID);
-    variable PrevFull     : std_logic := '0';
-    variable PrevValid    : std_logic := '0';
-    variable PrevEstateWr : std_logic_vector(3 downto 0) := "0000";
-    variable PrevFstateRd : std_logic_vector(3 downto 0) := "0000";
-  begin
-    wait until nReset = '1';
-    
-    loop
-      WaitForClock(Clock);
-      
-      -- Sample and record Full flag coverage
-      if full /= PrevFull then
-        if full = '1' then
-          FlagCov.ICover(2);  -- Full
-          Log(ProcID, "Flag: FULL detected, estate_wr=" & to_string(estate_wr), DEBUG);
-        else
-          FlagCov.ICover(3);  -- Not_Full
-        end if;
-        PrevFull := full;
-      end if;
-      
-      -- Sample and record Empty flag coverage (via valid)
-      if valid /= PrevValid then
-        if valid = '0' then
-          FlagCov.ICover(0);  -- Empty
-          Log(ProcID, "Flag: EMPTY detected, fstate_rd=" & to_string(fstate_rd), DEBUG);
-        else
-          FlagCov.ICover(1);  -- Not_Empty
-        end if;
-        PrevValid := valid;
-      end if;
-      
-      -- Sample and record estate_wr state coverage
-      if estate_wr /= PrevEstateWr then
-        StateCov.ICover(to_integer(unsigned(estate_wr)));
-        Log(ProcID, "estate_wr changed to: " & to_string(estate_wr), DEBUG);
-        PrevEstateWr := estate_wr;
-      end if;
-      
-      -- Sample and record fstate_rd state coverage
-      if fstate_rd /= PrevFstateRd then
-        StateCov.ICover(to_integer(unsigned(fstate_rd)));
-        Log(ProcID, "fstate_rd changed to: " & to_string(fstate_rd), DEBUG);
-        PrevFstateRd := fstate_rd;
-      end if;
-
-    end loop;
-    
     wait;
   end process;
 
