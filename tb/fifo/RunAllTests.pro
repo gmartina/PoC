@@ -1,6 +1,5 @@
 # =============================================================================
 # Authors:
-#  Thomas B. Preusser
 #  Gustavo Martin
 #
 # Description:
