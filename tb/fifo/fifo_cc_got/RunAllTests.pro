@@ -24,6 +24,9 @@
 # limitations under the License.
 # =============================================================================
 
+TestSuite PoC.fifo.cc.got
+library tb_fifo_cc_got
+
 # Analyze Verification Component packages and entities
 # Note: FifoCcGotTransactionPkg is no longer needed - using OSVVM's StreamRecType
 analyze FifoCcGotComponentPkg.vhdl
@@ -40,8 +43,7 @@ analyze fifo_cc_got_TestHarness.vhdl
 # Run all tests for each configuration (CONFIG_INDEX 0 to 7)
 # CONFIG_INDEX bits: [2]=OUTPUT_REG, [1]=STATE_REG, [0]=DATA_REG
 for {set config 0} {$config < 8} {incr config} {
-  TestSuite fifo_cc_got_Config_$config
-  
+
   # Run Simple test
   TestCase fifo_cc_got_Simple_Config_$config
   RunTest fifo_cc_got_Simple.vhdl [generic CONFIG_INDEX $config]

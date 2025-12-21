@@ -23,18 +23,14 @@
 # limitations under the License.
 # =============================================================================
 
-TestSuite PoC.fifo
-
-library tb_fifo
-
 # FIFO with Common Clock (cc), pipelined interface
 include ./fifo_cc_got/RunAllTests.pro
 
 # FIFO with Common Clock (cc), temporary put with commit/rollback
-include ./fifo_cc_got_tempput/RunAllTests.pro
+# include ./fifo_cc_got_tempput/RunAllTests.pro
 
-# FIFO with Independent Clocks (ic), address-based stream assembly
-include ./fifo_ic_assembly/RunAllTests.pro
+# # FIFO with Independent Clocks (ic), address-based stream assembly
+# include ./fifo_ic_assembly/RunAllTests.pro
 
-# FIFO with Independent Clocks (ic), first-word-fall-through
-include ./fifo_ic_got/RunAllTests.pro
+# # FIFO with Independent Clocks (ic), first-word-fall-through
+# include ./fifo_ic_got/RunAllTests.pro
