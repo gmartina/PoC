@@ -123,14 +123,17 @@ begin
         when SEND =>
           LocalData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
-          -- Wait if FIFO is full
-          WaitForLevel(full, '0');
-          WaitForClock(Clk);
-          
-          -- Write data
+          -- Assert write request with data
           din <= LocalData;
           put <= '1';
-          WaitForClock(Clk);
+          
+          -- Hold put='1' until clock edge with full='0' (handshake confirmed)
+          loop
+            WaitForClock(Clk);
+            exit when full = '0';
+          end loop;
+          
+          -- Deassert after handshake completes
           put <= '0';
           
           TransactionCount <= TransactionCount + 1;
@@ -142,16 +145,20 @@ begin
         when SEND_ASYNC =>
           LocalData := SafeResize(TransRec.DataToModel, DATA_WIDTH);
           
+          -- Assert write request
+          din <= LocalData;
+          put <= '1';
+          WaitForClock(Clk);
+          
+          -- Check if write was accepted on this clock edge
           if full = '0' then
-            din <= LocalData;
-            put <= '1';
-            WaitForClock(Clk);
-            put <= '0';
             TransactionCount <= TransactionCount + 1;
             Log(ModelID, "SEND_ASYNC: 0x" & to_hstring(LocalData), DEBUG);
           else
             Alert(ModelID, "SEND_ASYNC failed: FIFO full", WARNING);
           end if;
+          
+          put <= '0';
         
         ---------------------------------------------------------
         -- SEND_BURST - Write burst from BurstFifo
@@ -161,17 +168,17 @@ begin
           Log(ModelID, "SEND_BURST: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            -- Wait if FIFO is full before popping data
-            if full = '1' then
-              WaitForLevel(full, '0');
-            end if;
-            
             LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
             
-            -- Write data
+            -- Assert write request with data
             din <= LocalData;
             put <= '1';
-            WaitForClock(Clk);
+            
+            -- Hold put='1' until clock edge with full='0' (handshake confirmed)
+            loop
+              WaitForClock(Clk);
+              exit when full = '0';
+            end loop;
             
             TransactionCount <= TransactionCount + 1;
           end loop;
@@ -187,23 +194,25 @@ begin
           Log(ModelID, "SEND_BURST_ASYNC: " & integer'image(NumWords) & " words", INFO);
           
           for i in 1 to NumWords loop
-            -- Check full BEFORE popping to avoid losing data
-            if full = '1' then
-              -- Deassert put before exiting
+            LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
+            
+            -- Assert write request
+            din <= LocalData;
+            put <= '1';
+            WaitForClock(Clk);
+            
+            -- Check if write was accepted on this clock edge
+            if full = '0' then
+              TransactionCount <= TransactionCount + 1;
+            else
+              -- FIFO full - exit burst early
               put <= '0';
               Alert(ModelID, "SEND_BURST_ASYNC: FIFO full at word " & integer'image(i), WARNING);
               exit;
             end if;
-            
-            LocalData := SafeResize(Pop(TransRec.BurstFifo), DATA_WIDTH);
-            
-            din <= LocalData;
-            put <= '1';
-            WaitForClock(Clk);
-            TransactionCount <= TransactionCount + 1;
           end loop;
           
-          -- Deassert put after burst completes (also handles normal completion)
+          -- Deassert put after burst completes
           put <= '0';
         
         ---------------------------------------------------------
